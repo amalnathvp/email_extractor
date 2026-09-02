@@ -10,6 +10,7 @@ from backend.app.api.dashboard import router as dashboard_router
 from backend.app.api.files import router as files_router
 from backend.app.api.emails import router as emails_router
 from backend.app.api.process import router as process_router
+from backend.app.api.settings import router as settings_router
 from backend.app.services.scheduler_service import scheduler
 
 @asynccontextmanager
@@ -54,6 +55,7 @@ app.include_router(dashboard_router, prefix=settings.API_V1_STR)
 app.include_router(files_router, prefix=settings.API_V1_STR)
 app.include_router(emails_router, prefix=settings.API_V1_STR)
 app.include_router(process_router, prefix=settings.API_V1_STR)
+app.include_router(settings_router, prefix=settings.API_V1_STR)
 
 @app.get("/", tags=["Health"])
 def root():

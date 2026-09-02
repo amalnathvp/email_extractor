@@ -74,3 +74,14 @@ def test_simulate_process_and_endpoints(client):
     e_data = email_detail.json()
     assert len(e_data["attachments"]) == 4
     assert e_data["status"] == "PROCESSED"
+
+def test_settings_endpoints(client):
+    res = client.get("/api/settings/email")
+    assert res.status_code == 200
+    data = res.json()
+    assert "email_host" in data
+    assert "is_connected" in data
+
+    sync_res = client.post("/api/settings/auto-sync?enabled=true&interval_seconds=45")
+    assert sync_res.status_code == 200
+    assert sync_res.json()["poll_interval_seconds"] == 45

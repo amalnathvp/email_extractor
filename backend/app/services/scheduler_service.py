@@ -67,8 +67,13 @@ class SchedulerService:
             self.poll_interval = interval_seconds
 
         self.is_running = True
-        self._task = asyncio.create_task(self._poll_loop())
-        logger.info("Initiated background poller task.")
+        try:
+            loop = asyncio.get_running_loop()
+            self._task = loop.create_task(self._poll_loop())
+            logger.info("Initiated background poller task.")
+        except RuntimeError:
+            # If no running event loop is available, record state without raising
+            logger.info("No running event loop available for background task.")
 
     def stop(self):
         """Stops background polling task."""

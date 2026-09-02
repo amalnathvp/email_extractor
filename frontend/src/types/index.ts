@@ -61,6 +61,18 @@ export interface WorkerStatus {
   status_message: string;
 }
 
+export interface EmailConfig {
+  email_host: string;
+  email_port: number;
+  email_username: string;
+  email_use_ssl: boolean;
+  email_folder: string;
+  is_connected: boolean;
+  auto_poll_enabled: boolean;
+  poll_interval_seconds: number;
+  status_message: string;
+}
+
 export interface DashboardStats {
   total_emails: number;
   total_attachments: number;

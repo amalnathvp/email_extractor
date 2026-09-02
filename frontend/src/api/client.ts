@@ -7,6 +7,7 @@ import {
   ProcessResult,
   FileCategory,
   WorkerStatus,
+  EmailConfig,
 } from '../types';
 
 const BASE_URL = '/api';
@@ -101,4 +102,39 @@ export const api = {
     return fetchApi<{ status: string; interval_seconds: number }>(url, { method: 'POST' });
   },
   stopScheduler: () => fetchApi<{ status: string }>('/process/scheduler/stop', { method: 'POST' }),
+
+  // Email Settings & Auto-Sync
+  getEmailSettings: () => fetchApi<EmailConfig>('/settings/email'),
+  testEmailConnection: (data: {
+    email_host: string;
+    email_port: number;
+    email_username: string;
+    email_password: string;
+    email_use_ssl: boolean;
+    email_folder: string;
+  }) => fetchApi<{ success: boolean; message: string }>('/settings/test', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }),
+  saveEmailSettings: (data: {
+    email_host: string;
+    email_port: number;
+    email_username: string;
+    email_password: string;
+    email_use_ssl: boolean;
+    email_folder: string;
+    auto_poll_enabled: boolean;
+    poll_interval_seconds: number;
+  }) => fetchApi<EmailConfig>('/settings/email', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }),
+  toggleAutoSync: (enabled: boolean, intervalSeconds?: number) => {
+    const url = intervalSeconds
+      ? `/settings/auto-sync?enabled=${enabled}&interval_seconds=${intervalSeconds}`
+      : `/settings/auto-sync?enabled=${enabled}`;
+    return fetchApi<{ auto_poll_enabled: boolean; poll_interval_seconds: number; message: string }>(url, {
+      method: 'POST',
+    });
+  },
 };
