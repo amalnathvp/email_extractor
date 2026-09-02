@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
   Mail,
-  Files,
   FileText,
   Image as ImageIcon,
   FileCode,
@@ -9,201 +8,154 @@ import {
   Presentation,
   FolderArchive,
   RefreshCw,
-  Search,
   Download,
   Eye,
   Trash2,
-  Sparkles,
-  Layers,
-  ChevronLeft,
-  ChevronRight,
   CheckCircle2,
   AlertCircle,
-  Clock,
-  Info,
+  Folder,
+  ExternalLink,
+  Lock,
   X,
-  Plus,
-  ArrowRight,
 } from 'lucide-react';
-import { Attachment, Email, FileCategory, DashboardStats, EmailConfig } from './types';
+import { Attachment, FileCategory, EmailConfig } from './types';
 import { api } from './api/client';
 import { FilePreviewModal } from './components/files/FilePreviewModal';
-import { EmailDetailDrawer } from './components/emails/EmailDetailDrawer';
-import { ConnectEmailModal } from './components/settings/ConnectEmailModal';
 
 export function App() {
-  // Navigation: folder tabs or emails
-  const [activeTab, setActiveTab] = useState<FileCategory | 'ALL' | 'EMAILS'>('ALL');
-  const [search, setSearch] = useState<string>('');
-  const [page, setPage] = useState<number>(1);
-  const pageSize = 12;
-
-  // Data
-  const [files, setFiles] = useState<Attachment[]>([]);
-  const [totalFiles, setTotalFiles] = useState<number>(0);
-  const [totalPages, setTotalPages] = useState<number>(1);
-  const [emails, setEmails] = useState<Email[]>([]);
-  const [totalEmails, setTotalEmails] = useState<number>(0);
-  const [stats, setStats] = useState<DashboardStats | null>(null);
+  // Config & State
   const [emailConfig, setEmailConfig] = useState<EmailConfig | null>(null);
-
-  // States
-  const [loading, setLoading] = useState<boolean>(false);
+  const [selectedFolder, setSelectedFolder] = useState<FileCategory | 'ALL'>('ALL');
+  const [files, setFiles] = useState<Attachment[]>([]);
+  const [loadingFiles, setLoadingFiles] = useState<boolean>(false);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
 
-  // Modals
+  // Connect Form State
+  const [isEditingEmail, setIsEditingEmail] = useState<boolean>(false);
+  const [emailInput, setEmailInput] = useState<string>('');
+  const [passwordInput, setPasswordInput] = useState<string>('');
+  const [connecting, setConnecting] = useState<boolean>(false);
+  const [connectError, setConnectError] = useState<string | null>(null);
+
+  // Preview & Delete
   const [previewFile, setPreviewFile] = useState<Attachment | null>(null);
-  const [selectedEmailId, setSelectedEmailId] = useState<number | null>(null);
-  const [isConnectModalOpen, setIsConnectModalOpen] = useState<boolean>(false);
-  const [deleteTarget, setDeleteTarget] = useState<Attachment | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
 
-  // Toast
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
-
-  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
-    setToast({ message, type });
-    setTimeout(() => {
-      setToast((prev) => (prev?.message === message ? null : prev));
-    }, 4500);
-  };
-
-  // Load stats and email configuration
-  const loadGlobalData = () => {
-    api.getStats()
-      .then((s) => setStats(s))
-      .catch((err) => console.error('Failed to load stats:', err));
-
+  // Load email settings
+  const loadConfig = () => {
     api.getEmailSettings()
-      .then((cfg) => setEmailConfig(cfg))
-      .catch((err) => console.error('Failed to load email config:', err));
+      .then((cfg) => {
+        setEmailConfig(cfg);
+        if (!cfg.is_connected) {
+          setIsEditingEmail(true);
+        }
+      })
+      .catch((err) => console.error(err));
   };
 
-  // Load files or emails based on activeTab
-  const loadTabContent = () => {
-    setLoading(true);
-    if (activeTab === 'EMAILS') {
-      api.getEmails({
-        page,
-        page_size: pageSize,
-        search: search.trim() || undefined,
+  // Load sorted files
+  const loadFiles = () => {
+    setLoadingFiles(true);
+    const category = selectedFolder === 'ALL' ? undefined : selectedFolder;
+    api.getFiles({
+      category,
+      page: 1,
+      page_size: 100,
+      sort_by: 'date',
+      sort_order: 'desc',
+    })
+      .then((res) => {
+        setFiles(res.items);
+        setLoadingFiles(false);
       })
-        .then((res) => {
-          setEmails(res.items);
-          setTotalEmails(res.total);
-          setTotalPages(res.total_pages);
-          setLoading(false);
-        })
-        .catch(() => setLoading(false));
-    } else {
-      const categoryFilter = activeTab === 'ALL' ? undefined : activeTab;
-      api.getFiles({
-        page,
-        page_size: pageSize,
-        category: categoryFilter,
-        search: search.trim() || undefined,
-        sort_by: 'date',
-        sort_order: 'desc',
-      })
-        .then((res) => {
-          setFiles(res.items);
-          setTotalFiles(res.total);
-          setTotalPages(res.total_pages);
-          setLoading(false);
-        })
-        .catch(() => setLoading(false));
-    }
+      .catch(() => setLoadingFiles(false));
   };
 
   useEffect(() => {
-    loadGlobalData();
+    loadConfig();
   }, []);
 
   useEffect(() => {
-    loadTabContent();
-  }, [activeTab, page]);
+    loadFiles();
+  }, [selectedFolder]);
 
-  // Debounced search
+  // Background auto-refresh every 10 seconds to show newly sorted files
   useEffect(() => {
-    const handler = setTimeout(() => {
-      setPage(1);
-      loadTabContent();
-    }, 300);
-    return () => clearTimeout(handler);
-  }, [search]);
+    const interval = setInterval(() => {
+      loadConfig();
+      const category = selectedFolder === 'ALL' ? undefined : selectedFolder;
+      api.getFiles({ category, page: 1, page_size: 100, sort_by: 'date', sort_order: 'desc' })
+        .then((res) => setFiles(res.items))
+        .catch(() => {});
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [selectedFolder]);
 
-  // Background auto-refresh every 8 seconds to automatically display incoming sorted files
-  useEffect(() => {
-    const pollInterval = setInterval(() => {
-      loadGlobalData();
-      // Silently refresh current view without full page reload spinner
-      if (activeTab === 'EMAILS') {
-        api.getEmails({ page, page_size: pageSize, search: search.trim() || undefined })
-          .then((res) => {
-            setEmails(res.items);
-            setTotalEmails(res.total);
-          })
-          .catch(() => {});
-      } else {
-        const categoryFilter = activeTab === 'ALL' ? undefined : activeTab;
-        api.getFiles({ page, page_size: pageSize, category: categoryFilter, search: search.trim() || undefined })
-          .then((res) => {
-            setFiles(res.items);
-            setTotalFiles(res.total);
-          })
-          .catch(() => {});
-      }
-    }, 8000);
+  const handleConnect = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!emailInput || !passwordInput) return;
 
-    return () => clearInterval(pollInterval);
-  }, [activeTab, page, search]);
+    setConnecting(true);
+    setConnectError(null);
+
+    // Auto-detect host
+    let host = 'imap.gmail.com';
+    if (emailInput.includes('outlook') || emailInput.includes('hotmail')) {
+      host = 'outlook.office365.com';
+    } else if (emailInput.includes('yahoo')) {
+      host = 'imap.mail.yahoo.com';
+    }
+
+    try {
+      const cfg = await api.saveEmailSettings({
+        email_host: host,
+        email_port: 993,
+        email_username: emailInput.trim(),
+        email_password: passwordInput.trim(),
+        email_use_ssl: true,
+        email_folder: 'INBOX',
+        auto_poll_enabled: true,
+        poll_interval_seconds: 30,
+      });
+
+      setEmailConfig(cfg);
+      setIsEditingEmail(false);
+      setPasswordInput('');
+      setMessage(`Connected to ${cfg.email_username}! Checking for emails every 30s.`);
+      loadFiles();
+    } catch (err: any) {
+      setConnectError(err.message || 'Connection failed. Check your email and password.');
+    } finally {
+      setConnecting(false);
+    }
+  };
 
   const handleSyncNow = async () => {
     setIsSyncing(true);
     try {
       const res = await api.triggerProcess();
-      loadGlobalData();
-      loadTabContent();
-      if (res.success) {
-        showToast(res.message || 'Mailbox checked! All attachments sorted.', 'success');
-      } else {
-        showToast(res.message || 'Sync encountered an error', 'error');
-      }
+      loadFiles();
+      loadConfig();
+      setMessage(res.message || 'Mailbox checked.');
     } catch (err: any) {
-      showToast(`Sync failed: ${err.message || err}`, 'error');
+      setMessage(`Sync error: ${err.message}`);
     } finally {
       setIsSyncing(false);
     }
   };
 
-  const handleSimulateDemo = async () => {
+  const handleDelete = async (id: number) => {
+    if (!window.confirm('Delete this file?')) return;
     try {
-      showToast('Generating demo email with PDF, Image, Word & CSV...', 'info');
-      const res = await api.simulateEmail('standard');
-      loadGlobalData();
-      loadTabContent();
-      if (res.success) {
-        showToast(res.message, 'success');
-      }
+      await api.deleteFile(id);
+      loadFiles();
     } catch (err: any) {
-      showToast(`Simulation failed: ${err.message || err}`, 'error');
-    }
-  };
-
-  const handleDeleteFile = async () => {
-    if (!deleteTarget) return;
-    try {
-      await api.deleteFile(deleteTarget.id);
-      setDeleteTarget(null);
-      loadGlobalData();
-      loadTabContent();
-      showToast('File removed successfully.');
-    } catch (err: any) {
-      showToast(`Delete failed: ${err.message || err}`, 'error');
+      alert(`Delete failed: ${err.message}`);
     }
   };
 
   const formatBytes = (bytes: number): string => {
-    if (!bytes || bytes === 0) return '0 B';
+    if (!bytes) return '0 B';
     const k = 1024;
     const sizes = ['B', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
@@ -227,336 +179,268 @@ export function App() {
     }
   };
 
-  const folderTabs = [
-    { id: 'ALL' as const, label: 'All Files', count: stats?.total_attachments ?? 0 },
-    { id: 'PDF' as const, label: 'PDFs', count: stats?.categories.PDF ?? 0, icon: <FileText className="w-3.5 h-3.5 text-red-400" /> },
-    { id: 'IMAGE' as const, label: 'Images', count: stats?.categories.IMAGE ?? 0, icon: <ImageIcon className="w-3.5 h-3.5 text-purple-400" /> },
-    { id: 'DOCUMENT' as const, label: 'Documents', count: stats?.categories.DOCUMENT ?? 0, icon: <FileCode className="w-3.5 h-3.5 text-blue-400" /> },
-    { id: 'SPREADSHEET' as const, label: 'Spreadsheets', count: stats?.categories.SPREADSHEET ?? 0, icon: <Table className="w-3.5 h-3.5 text-emerald-400" /> },
-    { id: 'PRESENTATION' as const, label: 'Presentations', count: stats?.categories.PRESENTATION ?? 0, icon: <Presentation className="w-3.5 h-3.5 text-amber-400" /> },
-    { id: 'OTHER' as const, label: 'Others', count: stats?.categories.OTHER ?? 0, icon: <FolderArchive className="w-3.5 h-3.5 text-zinc-400" /> },
-    { id: 'EMAILS' as const, label: 'Email Inbox', count: stats?.total_emails ?? 0, icon: <Mail className="w-3.5 h-3.5 text-blue-400" /> },
+  const folders: { id: FileCategory | 'ALL'; name: string; icon: React.ReactNode; path: string }[] = [
+    { id: 'ALL', name: 'All Files', icon: <Folder className="w-4 h-4 text-zinc-300" />, path: 'storage/' },
+    { id: 'PDF', name: 'PDFs', icon: <FileText className="w-4 h-4 text-red-400" />, path: 'storage/pdf/' },
+    { id: 'IMAGE', name: 'Images', icon: <ImageIcon className="w-4 h-4 text-purple-400" />, path: 'storage/images/' },
+    { id: 'DOCUMENT', name: 'Documents', icon: <FileCode className="w-4 h-4 text-blue-400" />, path: 'storage/documents/' },
+    { id: 'SPREADSHEET', name: 'Spreadsheets', icon: <Table className="w-4 h-4 text-emerald-400" />, path: 'storage/spreadsheets/' },
+    { id: 'PRESENTATION', name: 'Presentations', icon: <Presentation className="w-4 h-4 text-amber-400" />, path: 'storage/presentations/' },
+    { id: 'OTHER', name: 'Others', icon: <FolderArchive className="w-4 h-4 text-zinc-400" />, path: 'storage/others/' },
   ];
 
   return (
-    <div className="min-h-screen bg-[#09090b] text-zinc-100 font-sans selection:bg-blue-600 selection:text-white flex flex-col">
-      {/* Top Clean Header */}
-      <header className="border-b border-zinc-800/80 bg-[#0d0d10] sticky top-0 z-30 px-6 py-3.5">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
-          {/* Brand Logo & Status */}
-          <div className="flex items-center space-x-3.5">
-            <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white shadow-sm shadow-blue-500/20">
-              <Layers className="w-4 h-4" />
-            </div>
-            <div>
-              <div className="flex items-center space-x-2">
-                <span className="font-semibold text-sm tracking-tight text-white">FileFlow</span>
-                <span className="text-zinc-600 text-xs">•</span>
-                <span className="text-xs text-zinc-400">Email Attachment Sorter</span>
-              </div>
-
-              {/* Status Pill */}
-              <button
-                onClick={() => setIsConnectModalOpen(true)}
-                className="flex items-center space-x-1.5 mt-0.5 group text-left"
-              >
-                {emailConfig?.is_connected ? (
-                  <>
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                    <span className="text-[11px] text-zinc-400 group-hover:text-zinc-200 transition-colors">
-                      Live sync with <strong className="text-zinc-200">{emailConfig.email_username}</strong>
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <span className="w-2 h-2 rounded-full bg-amber-500" />
-                    <span className="text-[11px] text-amber-400/90 group-hover:text-amber-300 transition-colors font-medium">
-                      Email not connected — Click to connect
-                    </span>
-                  </>
-                )}
-              </button>
-            </div>
+    <div className="min-h-screen bg-[#0c0c0e] text-zinc-100 font-sans p-6 sm:p-10 flex flex-col items-center">
+      <div className="w-full max-w-4xl space-y-6">
+        
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-zinc-800 pb-5">
+          <div>
+            <h1 className="text-xl font-bold tracking-tight text-white flex items-center space-x-2">
+              <Mail className="w-5 h-5 text-blue-500" />
+              <span>Email Attachment Sorter</span>
+            </h1>
+            <p className="text-xs text-zinc-400 mt-1">
+              Connect your inbox — attachments are automatically detected and sorted into folders.
+            </p>
           </div>
 
-          {/* Right Controls: Search, Sync Now, Connect Email */}
-          <div className="flex items-center space-x-2.5">
-            {/* Instant Search Bar */}
-            <div className="relative">
-              <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                placeholder="Search files or senders..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="bg-zinc-900 border border-zinc-800 rounded-lg pl-9 pr-3 py-1.5 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-600 w-44 sm:w-56"
-              />
-            </div>
-
-            {/* Sync Now Button */}
+          {emailConfig?.is_connected && (
             <button
               onClick={handleSyncNow}
               disabled={isSyncing}
-              className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-zinc-850 hover:bg-zinc-800 text-zinc-200 border border-zinc-700/60 text-xs font-medium transition-colors disabled:opacity-50"
-              title="Check mailbox and sort new files immediately"
+              className="flex items-center space-x-2 px-3.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs font-medium text-white transition-colors disabled:opacity-50 border border-zinc-700"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-blue-400' : 'text-zinc-400'}`} />
-              <span>{isSyncing ? 'Syncing...' : 'Sync Now'}</span>
+              <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-blue-400' : ''}`} />
+              <span>{isSyncing ? 'Checking mail...' : 'Sync Now'}</span>
             </button>
+          )}
+        </div>
 
-            {/* Connect Email Button */}
-            <button
-              onClick={() => setIsConnectModalOpen(true)}
-              className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium transition-colors shadow-sm"
-            >
-              <Mail className="w-3.5 h-3.5" />
-              <span>{emailConfig?.is_connected ? 'Email Settings' : 'Connect Email'}</span>
-            </button>
-
-            {/* Quick Demo Simulator */}
-            <button
-              onClick={handleSimulateDemo}
-              className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-800 transition-colors"
-              title="Generate simulated test email with PDF, Image, Word & CSV"
-            >
-              <Sparkles className="w-4 h-4 text-blue-400" />
+        {/* Status Notification Banner */}
+        {message && (
+          <div className="p-3 bg-zinc-900 border border-zinc-800 rounded-lg text-xs text-zinc-300 flex items-center justify-between">
+            <span className="flex items-center space-x-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>{message}</span>
+            </span>
+            <button onClick={() => setMessage(null)} className="text-zinc-500 hover:text-zinc-300">
+              <X className="w-3.5 h-3.5" />
             </button>
           </div>
-        </div>
-      </header>
+        )}
 
-      {/* Folder Navigation Bar (Clean Tabs) */}
-      <nav className="border-b border-zinc-850 bg-[#09090b] px-6">
-        <div className="max-w-7xl mx-auto flex items-center space-x-1 overflow-x-auto py-2.5 no-scrollbar">
-          {folderTabs.map((tab) => {
-            const isActive = activeTab === tab.id;
-            return (
+        {/* 1. Email Connection Box */}
+        <div className="bg-[#121215] border border-zinc-800 rounded-xl p-5 shadow-sm">
+          {emailConfig?.is_connected && !isEditingEmail ? (
+            /* Connected state */
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center space-x-3">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                <div>
+                  <div className="text-sm font-semibold text-white flex items-center space-x-2">
+                    <span>Connected: {emailConfig.email_username}</span>
+                  </div>
+                  <p className="text-xs text-zinc-400 mt-0.5">
+                    Auto-sorting incoming emails every 30 seconds into server directories.
+                  </p>
+                </div>
+              </div>
+
               <button
-                key={tab.id}
                 onClick={() => {
-                  setActiveTab(tab.id);
-                  setPage(1);
+                  setEmailInput(emailConfig.email_username);
+                  setIsEditingEmail(true);
                 }}
-                className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
-                  isActive
-                    ? 'bg-zinc-800 text-white shadow-sm font-semibold'
-                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
-                }`}
+                className="text-xs text-zinc-400 hover:text-zinc-200 underline self-start sm:self-auto"
               >
-                {tab.icon}
-                <span>{tab.label}</span>
-                <span
-                  className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full ${
-                    isActive ? 'bg-zinc-700 text-zinc-100' : 'bg-zinc-900 text-zinc-500'
+                Change Email
+              </button>
+            </div>
+          ) : (
+            /* Connect Form */
+            <form onSubmit={handleConnect} className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-semibold text-white">Connect Your Email</h2>
+                {emailConfig?.is_connected && (
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingEmail(false)}
+                    className="text-xs text-zinc-500 hover:text-zinc-300"
+                  >
+                    Cancel
+                  </button>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-zinc-400 mb-1">Email Address</label>
+                  <input
+                    type="email"
+                    required
+                    placeholder="your.email@gmail.com"
+                    value={emailInput}
+                    onChange={(e) => setEmailInput(e.target.value)}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="text-xs text-zinc-400">App Password</label>
+                    <a
+                      href="https://myaccount.google.com/apppasswords"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[11px] text-blue-400 hover:underline inline-flex items-center space-x-1"
+                    >
+                      <span>Gmail App Password</span>
+                      <ExternalLink className="w-2.5 h-2.5" />
+                    </a>
+                  </div>
+                  <input
+                    type="password"
+                    required
+                    placeholder="16-character app password"
+                    value={passwordInput}
+                    onChange={(e) => setPasswordInput(e.target.value)}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-blue-500 font-mono"
+                  />
+                </div>
+              </div>
+
+              {connectError && (
+                <div className="p-3 rounded-lg bg-red-950/40 border border-red-800/50 text-xs text-red-300 flex items-start space-x-2">
+                  <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                  <span>{connectError}</span>
+                </div>
+              )}
+
+              <div className="flex justify-end pt-1">
+                <button
+                  type="submit"
+                  disabled={connecting || !emailInput || !passwordInput}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-medium disabled:opacity-40 transition-colors shadow-sm"
+                >
+                  {connecting ? 'Testing & Connecting...' : 'Connect & Start Auto-Sorting'}
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+
+        {/* 2. Folder Category Tabs */}
+        <div>
+          <div className="flex items-center space-x-1.5 overflow-x-auto pb-1 no-scrollbar">
+            {folders.map((folder) => {
+              const count = files.filter((f) => folder.id === 'ALL' || f.file_category === folder.id).length;
+              const isSelected = selectedFolder === folder.id;
+
+              return (
+                <button
+                  key={folder.id}
+                  onClick={() => setSelectedFolder(folder.id)}
+                  className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${
+                    isSelected
+                      ? 'bg-zinc-800 text-white shadow-sm font-semibold'
+                      : 'bg-zinc-900/50 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-850'
                   }`}
                 >
-                  {tab.count}
-                </span>
-              </button>
-            );
-          })}
+                  {folder.icon}
+                  <span>{folder.name}</span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${isSelected ? 'bg-zinc-700 text-white' : 'bg-zinc-800 text-zinc-400'}`}>
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </div>
-      </nav>
 
-      {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-6 space-y-4">
-        {activeTab === 'EMAILS' ? (
-          /* Email Inbox View */
-          <div className="bg-[#0f0f13] border border-zinc-850 rounded-xl overflow-hidden shadow-sm">
-            <div className="p-4 border-b border-zinc-850 flex items-center justify-between">
-              <div>
-                <h2 className="text-sm font-semibold text-zinc-100">Processed Emails</h2>
-                <p className="text-xs text-zinc-500">Emails received and scanned for attachments</p>
-              </div>
-              <span className="text-xs font-mono text-zinc-400">{totalEmails} emails recorded</span>
-            </div>
-
-            {loading ? (
-              <div className="py-20 text-center text-xs text-zinc-500">Loading inbox...</div>
-            ) : emails.length === 0 ? (
-              <div className="py-20 text-center space-y-2">
-                <p className="text-sm text-zinc-400 font-medium">No emails found</p>
-                <p className="text-xs text-zinc-600">Connect your email or click "Sync Now" to process new emails.</p>
-              </div>
-            ) : (
-              <table className="w-full text-left text-xs">
-                <thead className="border-b border-zinc-850 bg-zinc-900/30 text-zinc-500 text-[10px] uppercase tracking-wider font-semibold">
-                  <tr>
-                    <th className="py-3 px-4">Subject</th>
-                    <th className="py-3 px-4">Sender</th>
-                    <th className="py-3 px-4">Attachments</th>
-                    <th className="py-3 px-4">Received Date</th>
-                    <th className="py-3 px-4 text-right">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-zinc-850/60 text-zinc-300">
-                  {emails.map((email) => (
-                    <tr
-                      key={email.id}
-                      onClick={() => setSelectedEmailId(email.id)}
-                      className="hover:bg-zinc-900/40 cursor-pointer transition-colors group"
-                    >
-                      <td className="py-3 px-4">
-                        <div className="flex items-center space-x-2.5 max-w-md truncate">
-                          <Mail className="w-4 h-4 text-blue-400 shrink-0" />
-                          <span className="font-medium text-zinc-200 group-hover:text-blue-400 transition-colors truncate">
-                            {email.subject || '(No Subject)'}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="py-3 px-4 text-zinc-300 font-medium truncate max-w-xs">{email.sender}</td>
-                      <td className="py-3 px-4 font-mono text-[11px] text-zinc-400">
-                        {email.attachment_count} files sorted
-                      </td>
-                      <td className="py-3 px-4 font-mono text-[11px] text-zinc-500">
-                        {email.received_at ? new Date(email.received_at).toLocaleString() : '—'}
-                      </td>
-                      <td className="py-3 px-4 text-right">
-                        <span className="text-zinc-500 group-hover:text-white transition-colors">
-                          <ArrowRight className="w-4 h-4 inline" />
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
+        {/* 3. Sorted Files List */}
+        <div className="bg-[#121215] border border-zinc-800 rounded-xl overflow-hidden shadow-sm">
+          <div className="px-5 py-3.5 border-b border-zinc-800/80 flex items-center justify-between text-xs text-zinc-400">
+            <span className="font-semibold text-zinc-200">
+              {selectedFolder === 'ALL' ? 'All Sorted Files' : `${selectedFolder} Folder`}
+            </span>
+            <span className="font-mono text-[11px]">
+              {files.length} {files.length === 1 ? 'file' : 'files'}
+            </span>
           </div>
-        ) : (
-          /* File Browser Table */
-          <div className="bg-[#0f0f13] border border-zinc-850 rounded-xl overflow-hidden shadow-sm">
-            <div className="p-4 border-b border-zinc-850 flex items-center justify-between">
-              <div>
-                <h2 className="text-sm font-semibold text-zinc-100">
-                  {activeTab === 'ALL' ? 'All Sorted Attachments' : `${activeTab} Files`}
-                </h2>
-                <p className="text-xs text-zinc-500">
-                  Automatically extracted and organized by file type
-                </p>
-              </div>
-              <span className="text-xs font-mono text-zinc-400">{totalFiles} files</span>
-            </div>
 
-            {loading ? (
-              <div className="py-20 text-center text-xs text-zinc-500">Loading files...</div>
-            ) : files.length === 0 ? (
-              <div className="py-20 text-center space-y-2">
-                <p className="text-sm text-zinc-400 font-medium">No files in this folder</p>
-                <p className="text-xs text-zinc-600">
-                  Incoming attachments from your inbox will be sorted here automatically.
-                </p>
-              </div>
-            ) : (
-              <table className="w-full text-left text-xs">
-                <thead className="border-b border-zinc-850 bg-zinc-900/30 text-zinc-500 text-[10px] uppercase tracking-wider font-semibold">
-                  <tr>
-                    <th className="py-3 px-4">Filename</th>
-                    <th className="py-3 px-4">Folder / Category</th>
-                    <th className="py-3 px-4">Size</th>
-                    <th className="py-3 px-4">From (Sender)</th>
-                    <th className="py-3 px-4">Date</th>
-                    <th className="py-3 px-4 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-zinc-850/60 text-zinc-300">
-                  {files.map((file) => (
-                    <tr
-                      key={file.id}
+          {loadingFiles ? (
+            <div className="py-16 text-center text-xs text-zinc-500">Loading files...</div>
+          ) : files.length === 0 ? (
+            <div className="py-16 text-center space-y-2">
+              <p className="text-sm font-medium text-zinc-400">Folder is empty</p>
+              <p className="text-xs text-zinc-500 max-w-sm mx-auto">
+                {emailConfig?.is_connected
+                  ? 'Send an email with attachments to your inbox — they will automatically appear here.'
+                  : 'Connect your email above to start sorting attachments automatically.'}
+              </p>
+            </div>
+          ) : (
+            <div className="divide-y divide-zinc-850">
+              {files.map((file) => (
+                <div
+                  key={file.id}
+                  className="px-5 py-3 flex items-center justify-between hover:bg-zinc-900/50 transition-colors text-xs"
+                >
+                  {/* File Info */}
+                  <div
+                    onClick={() => setPreviewFile(file)}
+                    className="flex items-center space-x-3 cursor-pointer truncate max-w-md group"
+                  >
+                    <span className="p-2 rounded-lg bg-zinc-900 shrink-0">
+                      {getCategoryIcon(file.file_category)}
+                    </span>
+                    <div className="truncate">
+                      <span className="font-medium text-zinc-200 group-hover:text-blue-400 transition-colors truncate block">
+                        {file.original_filename}
+                      </span>
+                      <span className="text-[11px] text-zinc-500 truncate block">
+                        From: {file.sender || 'Unknown'} • {formatBytes(file.file_size)}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center space-x-2">
+                    <span className="text-[11px] text-zinc-500 font-mono hidden sm:inline mr-3">
+                      {new Date(file.created_at).toLocaleDateString()}
+                    </span>
+
+                    <button
                       onClick={() => setPreviewFile(file)}
-                      className="hover:bg-zinc-900/40 cursor-pointer transition-colors group"
+                      className="p-1.5 rounded-md hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors"
+                      title="Preview"
                     >
-                      <td className="py-3 px-4">
-                        <div className="flex items-center space-x-3 max-w-sm truncate">
-                          <span className="p-1.5 rounded-md bg-zinc-900 shrink-0">
-                            {getCategoryIcon(file.file_category)}
-                          </span>
-                          <span className="font-medium text-zinc-200 group-hover:text-blue-400 transition-colors truncate">
-                            {file.original_filename}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="py-3 px-4 font-mono text-[11px]">
-                        <span className="px-2 py-0.5 rounded-md bg-zinc-900 border border-zinc-800 text-zinc-300">
-                          {file.file_category}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 font-mono text-[11px] text-zinc-400">
-                        {formatBytes(file.file_size)}
-                      </td>
-                      <td className="py-3 px-4 text-zinc-400 truncate max-w-xs">{file.sender || '—'}</td>
-                      <td className="py-3 px-4 font-mono text-[11px] text-zinc-500">
-                        {new Date(file.created_at).toLocaleDateString()}
-                      </td>
-                      <td className="py-3 px-4 text-right" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center justify-end space-x-1">
-                          <button
-                            onClick={() => setPreviewFile(file)}
-                            className="p-1.5 rounded hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors"
-                            title="Preview File"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </button>
-                          <a
-                            href={api.getFileDownloadUrl(file.id)}
-                            download={file.original_filename}
-                            className="p-1.5 rounded hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors"
-                            title="Download File"
-                          >
-                            <Download className="w-4 h-4" />
-                          </a>
-                          <button
-                            onClick={() => setDeleteTarget(file)}
-                            className="p-1.5 rounded hover:bg-zinc-800 text-zinc-500 hover:text-red-400 transition-colors"
-                            title="Delete File"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        )}
-
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between border-t border-zinc-850 pt-3 text-xs text-zinc-400">
-            <span className="font-mono text-[11px]">Page {page} of {totalPages}</span>
-            <div className="flex items-center space-x-2">
-              <button
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="p-1.5 rounded border border-zinc-800 hover:bg-zinc-800 disabled:opacity-40"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages}
-                className="p-1.5 rounded border border-zinc-800 hover:bg-zinc-800 disabled:opacity-40"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
+                      <Eye className="w-4 h-4" />
+                    </button>
+                    <a
+                      href={api.getFileDownloadUrl(file.id)}
+                      download={file.original_filename}
+                      className="p-1.5 rounded-md hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors"
+                      title="Download"
+                    >
+                      <Download className="w-4 h-4" />
+                    </a>
+                    <button
+                      onClick={() => handleDelete(file.id)}
+                      className="p-1.5 rounded-md hover:bg-zinc-800 text-zinc-500 hover:text-red-400 transition-colors"
+                      title="Delete"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
-          </div>
-        )}
-      </main>
+          )}
+        </div>
 
-      {/* Connect Email Modal */}
-      <ConnectEmailModal
-        isOpen={isConnectModalOpen}
-        onClose={() => setIsConnectModalOpen(false)}
-        onSaved={(newConfig) => {
-          setEmailConfig(newConfig);
-          loadGlobalData();
-          loadTabContent();
-          showToast(`Connected to ${newConfig.email_username}! Auto-syncing every ${newConfig.poll_interval_seconds}s.`);
-        }}
-        currentConfig={emailConfig}
-      />
+      </div>
 
       {/* File Preview Modal */}
       {previewFile && (
@@ -564,72 +448,6 @@ export function App() {
           file={previewFile}
           onClose={() => setPreviewFile(null)}
         />
-      )}
-
-      {/* Email Details Drawer */}
-      {selectedEmailId !== null && (
-        <EmailDetailDrawer
-          emailId={selectedEmailId}
-          onClose={() => setSelectedEmailId(null)}
-          onPreviewAttachment={(att) => {
-            setPreviewFile(att);
-          }}
-        />
-      )}
-
-      {/* Delete Confirmation Modal */}
-      {deleteTarget && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#121215] border border-zinc-800 rounded-xl max-w-md w-full p-6 space-y-4 shadow-2xl">
-            <div className="flex items-center space-x-3 text-red-400">
-              <Trash2 className="w-5 h-5" />
-              <h3 className="text-sm font-semibold text-zinc-100">Delete File</h3>
-            </div>
-            <p className="text-xs text-zinc-400 leading-relaxed">
-              Are you sure you want to delete <strong className="text-zinc-200">{deleteTarget.original_filename}</strong>? This removes it from storage.
-            </p>
-            <div className="flex justify-end space-x-2 pt-2">
-              <button
-                onClick={() => setDeleteTarget(null)}
-                className="px-3 py-1.5 rounded-md bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleDeleteFile}
-                className="px-3 py-1.5 rounded-md bg-red-600 hover:bg-red-500 text-white text-xs font-medium"
-              >
-                Delete File
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Floating Toast Notification */}
-      {toast && (
-        <div className="fixed bottom-6 right-6 z-50 animate-in slide-in-from-bottom-5 fade-in duration-200">
-          <div
-            className={`flex items-center space-x-3 px-4 py-3 rounded-xl border shadow-xl text-xs max-w-md ${
-              toast.type === 'success'
-                ? 'bg-[#101914] border-emerald-500/30 text-emerald-300'
-                : toast.type === 'error'
-                ? 'bg-[#1c1214] border-red-500/30 text-red-300'
-                : 'bg-[#111622] border-blue-500/30 text-blue-300'
-            }`}
-          >
-            {toast.type === 'success' && <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />}
-            {toast.type === 'error' && <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />}
-            {toast.type === 'info' && <Info className="w-4 h-4 text-blue-400 shrink-0" />}
-            <span className="leading-snug">{toast.message}</span>
-            <button
-              onClick={() => setToast(null)}
-              className="p-1 rounded hover:bg-white/10 text-zinc-400 hover:text-white shrink-0"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        </div>
       )}
     </div>
   );
