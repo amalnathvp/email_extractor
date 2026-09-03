@@ -123,9 +123,13 @@ class EmailService:
                 client.select_folder(self.folder, readonly=False)
                 logger.info(f"Opened IMAP folder '{self.folder}', searching with criteria: '{search_criteria}'")
 
-                # Perform search
+                # Perform search: try configured criteria first; fallback to ALL if none found
                 msg_ids = client.search([search_criteria])
                 logger.info(f"Found {len(msg_ids)} emails matching '{search_criteria}'")
+                if not msg_ids and search_criteria != "ALL":
+                    logger.info(f"No emails found matching '{search_criteria}', searching 'ALL'...")
+                    msg_ids = client.search(["ALL"])
+                    logger.info(f"Found {len(msg_ids)} emails matching 'ALL'")
 
                 if limit and len(msg_ids) > limit:
                     msg_ids = msg_ids[:limit]

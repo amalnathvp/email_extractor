@@ -74,7 +74,8 @@ class ProcessingService:
                     mime_type=validated_mime,
                     file_category=category,
                     file_size=file_size,
-                    storage_path=relative_path
+                    storage_path=relative_path,
+                    file_data=att.content
                 )
                 self.db.add(db_att)
 

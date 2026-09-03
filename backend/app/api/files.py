@@ -1,6 +1,6 @@
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc, asc, or_
 from backend.app.database.database import get_db
@@ -105,19 +105,25 @@ def download_file(file_id: int, db: Session = Depends(get_db)):
 
     try:
         file_path = StorageService.get_absolute_path(att.storage_path)
-    except StorageSecurityError:
-        raise HTTPException(status_code=403, detail="Unsafe file path detected")
+        if file_path.is_file():
+            return FileResponse(
+                path=str(file_path),
+                media_type=att.mime_type or "application/octet-stream",
+                filename=att.original_filename,
+                content_disposition_type="attachment"
+            )
+    except Exception:
+        pass
 
-    if not file_path.is_file():
-        logger.error(f"File missing on disk: {file_path}")
-        raise HTTPException(status_code=404, detail="File content missing on storage system")
+    # Serverless fallback: serve directly from Supabase binary storage
+    if att.file_data:
+        return Response(
+            content=bytes(att.file_data),
+            media_type=att.mime_type or "application/octet-stream",
+            headers={"Content-Disposition": f'attachment; filename="{att.original_filename}"'}
+        )
 
-    return FileResponse(
-        path=str(file_path),
-        media_type=att.mime_type or "application/octet-stream",
-        filename=att.original_filename,
-        content_disposition_type="attachment"
-    )
+    raise HTTPException(status_code=404, detail="File content missing on storage system")
 
 @router.get("/{file_id}/preview")
 def preview_file(file_id: int, db: Session = Depends(get_db)):
@@ -128,18 +134,24 @@ def preview_file(file_id: int, db: Session = Depends(get_db)):
 
     try:
         file_path = StorageService.get_absolute_path(att.storage_path)
-    except StorageSecurityError:
-        raise HTTPException(status_code=403, detail="Unsafe file path detected")
+        if file_path.is_file():
+            return FileResponse(
+                path=str(file_path),
+                media_type=att.mime_type or "application/octet-stream",
+                content_disposition_type="inline"
+            )
+    except Exception:
+        pass
 
-    if not file_path.is_file():
-        raise HTTPException(status_code=404, detail="File content missing on storage system")
+    # Serverless fallback: serve directly from Supabase binary storage
+    if att.file_data:
+        return Response(
+            content=bytes(att.file_data),
+            media_type=att.mime_type or "application/octet-stream",
+            headers={"Content-Disposition": f'inline; filename="{att.original_filename}"'}
+        )
 
-    # Serve inline for browser rendering
-    return FileResponse(
-        path=str(file_path),
-        media_type=att.mime_type or "application/octet-stream",
-        content_disposition_type="inline"
-    )
+    raise HTTPException(status_code=404, detail="File content missing on storage system")
 
 @router.delete("/{file_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_file(file_id: int, db: Session = Depends(get_db)):

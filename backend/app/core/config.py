@@ -28,10 +28,10 @@ class Settings(BaseSettings):
     EMAIL_HOST: str = "imap.zoho.in"
     EMAIL_PORT: int = 993
     EMAIL_USERNAME: str = "amalnathvp@zohomail.in"
-    EMAIL_PASSWORD: str = ""
+    EMAIL_PASSWORD: str = "E9vX0QivYNhC"
     EMAIL_USE_SSL: bool = True
     EMAIL_FOLDER: str = "INBOX"
-    EMAIL_SEARCH_CRITERIA: str = "UNSEEN"  # or 'ALL'
+    EMAIL_SEARCH_CRITERIA: str = "ALL"
     MARK_SEEN_ON_PROCESS: bool = True
 
     # Database Configuration (Supabase PostgreSQL Pooler)

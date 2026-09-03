@@ -7,6 +7,9 @@ from backend.app.database.models import Email, Attachment, EmailStatus
 from backend.app.schemas.email import EmailRead, EmailDetail, PaginatedEmails
 from backend.app.schemas.attachment import AttachmentRead
 
+from backend.app.core.config import settings
+from backend.app.core.logging import logger
+
 router = APIRouter(prefix="/emails", tags=["Emails"])
 
 @router.get("", response_model=PaginatedEmails)
@@ -15,9 +18,19 @@ def list_emails(
     page_size: int = Query(20, ge=1, le=100, description="Items per page"),
     status: Optional[EmailStatus] = Query(None, description="Filter by status"),
     search: Optional[str] = Query(None, description="Search sender, recipient, or subject"),
+    sync: bool = Query(True, description="Sync incoming emails from mailbox"),
     db: Session = Depends(get_db)
 ):
-    """Retrieves paginated list of processed emails with attachment counts."""
+    """Retrieves paginated list of processed emails with attachment counts.
+    Automatically checks the inbox for any new incoming emails."""
+    if sync and settings.EMAIL_USERNAME and settings.EMAIL_PASSWORD:
+        try:
+            from backend.app.services.processing_service import ProcessingService
+            processor = ProcessingService(db=db)
+            processor.process_inbox()
+        except Exception as e:
+            logger.warning(f"On-demand inbox intake notice: {e}")
+
     # Subquery for attachment count
     att_count_subq = (
         db.query(Attachment.email_id, func.count(Attachment.id).label("att_count"))

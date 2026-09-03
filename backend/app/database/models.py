@@ -8,7 +8,8 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Enum as SQLEnum,
-    Index
+    Index,
+    LargeBinary
 )
 from sqlalchemy.orm import relationship
 from backend.app.database.database import Base
@@ -70,6 +71,7 @@ class Attachment(Base):
     file_category = Column(SQLEnum(FileCategory, native_enum=False), nullable=False, index=True)
     file_size = Column(Integer, nullable=False)  # in bytes
     storage_path = Column(String(1024), nullable=False)  # relative path within storage root
+    file_data = Column(LargeBinary, nullable=True)  # raw binary for serverless cloud persistence
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False, index=True)
 
     # Back reference to Email

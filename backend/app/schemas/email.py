@@ -21,6 +21,7 @@ class EmailRead(EmailBase):
     error_message: Optional[str] = None
     created_at: datetime
     attachment_count: int = 0
+    attachments: List[AttachmentRead] = []
 
 class EmailDetail(EmailRead):
     model_config = ConfigDict(from_attributes=True)
