@@ -1,8 +1,8 @@
 import os
 import sys
 from pathlib import Path
+import traceback
 
-# Add project root and backend paths to sys.path so 'backend.app' can be resolved by Vercel
 CURRENT_DIR = Path(__file__).resolve().parent
 ROOT_DIR = CURRENT_DIR.parent
 
@@ -11,8 +11,31 @@ for path_entry in [ROOT_DIR, CURRENT_DIR, ROOT_DIR / "backend"]:
     if path_str not in sys.path:
         sys.path.insert(0, path_str)
 
-from backend.app.main import app
+init_error = None
+app = None
 
-# Expose standard top-level entrypoints recognized by Vercel's Python runtime
+try:
+    from backend.app.main import app as backend_app
+    app = backend_app
+except Exception as e:
+    init_error = f"{type(e).__name__}: {str(e)}\n\n{traceback.format_exc()}"
+    from fastapi import FastAPI
+    from fastapi.responses import JSONResponse
+
+    app = FastAPI(title="Diagnostic Fallback")
+
+    @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
+    async def fallback_handler(path: str):
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": "Backend Initialization Error",
+                "details": init_error,
+                "sys_path": sys.path,
+                "root_exists": ROOT_DIR.exists(),
+                "root_files": os.listdir(str(ROOT_DIR)) if ROOT_DIR.exists() else []
+            }
+        )
+
 application = app
 handler = app
