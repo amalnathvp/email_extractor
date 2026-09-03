@@ -6,6 +6,8 @@ from backend.app.schemas.attachment import AttachmentRead
 class CategoryCounts(BaseModel):
     PDF: int = 0
     IMAGE: int = 0
+    VIDEO: int = 0
+    AUDIO: int = 0
     DOCUMENT: int = 0
     SPREADSHEET: int = 0
     PRESENTATION: int = 0

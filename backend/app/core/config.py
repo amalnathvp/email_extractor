@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     DEBUG: bool = False
 
     # Email / IMAP Configuration
-    TARGET_EMAIL: str = "macrovaniac1@gmail.com"
+    TARGET_EMAIL: str = "demomailtrap.co"
     MAILTRAP_TOKEN: str = "82e9299a78c8983278408494a641fa5b"
     MAILTRAP_SENDER: str = "hello@demomailtrap.co"
     MAILTRAP_INBOX_ID: int = 4892570
@@ -29,7 +29,7 @@ class Settings(BaseSettings):
 
     EMAIL_HOST: str = "imap.gmail.com"
     EMAIL_PORT: int = 993
-    EMAIL_USERNAME: str = "macrovaniac1@gmail.com"
+    EMAIL_USERNAME: str = "demomailtrap.co"
     EMAIL_PASSWORD: str = ""
     EMAIL_USE_SSL: bool = True
     EMAIL_FOLDER: str = "INBOX"

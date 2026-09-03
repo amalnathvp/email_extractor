@@ -30,8 +30,8 @@ def test_simulate_process_and_endpoints(client):
     assert stats["total_attachments"] == 4
     assert stats["categories"]["PDF"] == 1
     assert stats["categories"]["IMAGE"] == 1
-    assert stats["categories"]["DOCUMENT"] == 1
-    assert stats["categories"]["SPREADSHEET"] == 1
+    assert stats["categories"]["VIDEO"] == 1
+    assert stats["categories"]["AUDIO"] == 1
 
     # 3. List files
     files_res = client.get("/api/files")
