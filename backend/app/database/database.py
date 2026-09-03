@@ -9,6 +9,9 @@ def get_database_url() -> str:
     # SQLAlchemy requires postgresql:// instead of postgres://
     if url.startswith("postgres://"):
         url = url.replace("postgres://", "postgresql://", 1)
+    # Supabase Transaction Pooler (port 6543) supports unlimited connections and avoids EMAXCONNSESSION
+    if "pooler.supabase.com:5432" in url:
+        url = url.replace("pooler.supabase.com:5432", "pooler.supabase.com:6543")
     return url
 
 db_url = get_database_url()
@@ -17,12 +20,12 @@ engine_kwargs = {
     "echo": settings.DEBUG,
 }
 
+from sqlalchemy.pool import NullPool
+
 if db_url.startswith("postgresql"):
     engine_kwargs.update({
-        "pool_pre_ping": True,
-        "pool_recycle": 300,
-        "pool_size": 10,
-        "max_overflow": 20,
+        "poolclass": NullPool,
+        "connect_args": {"sslmode": "require"}
     })
 
 # If DATABASE_URL is not yet provided, engine is None until configured

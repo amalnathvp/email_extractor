@@ -34,8 +34,8 @@ class Settings(BaseSettings):
     EMAIL_SEARCH_CRITERIA: str = "ALL"
     MARK_SEEN_ON_PROCESS: bool = True
 
-    # Database Configuration (Supabase PostgreSQL Pooler)
-    DATABASE_URL: str = "postgresql://postgres.kaasbhpibxzvqhdrdbst:mailmanageramal31@aws-0-ap-southeast-2.pooler.supabase.com:5432/postgres?sslmode=require"
+    # Database Configuration (Supabase PostgreSQL Transaction Pooler)
+    DATABASE_URL: str = "postgresql://postgres.kaasbhpibxzvqhdrdbst:mailmanageramal31@aws-0-ap-southeast-2.pooler.supabase.com:6543/postgres?sslmode=require"
     SUPABASE_URL: str = "https://kaasbhpibxzvqhdrdbst.supabase.co"
     SUPABASE_KEY: str = ""
 

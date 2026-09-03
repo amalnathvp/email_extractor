@@ -89,6 +89,12 @@ export const api = {
   },
 
   getEmailDetails: (id: number) => fetchApi<EmailDetail>(`/emails/${id}`),
+  deleteEmail: (id: number) => fetchApi<void>(`/emails/${id}`, { method: 'DELETE' }),
+  batchDeleteEmails: (emailIds: number[]) =>
+    fetchApi<{ deleted: number }>('/emails/batch-delete', {
+      method: 'POST',
+      body: JSON.stringify({ email_ids: emailIds }),
+    }),
 
   // Process & Simulation
   triggerProcess: () => fetchApi<ProcessResult>('/process', { method: 'POST' }),

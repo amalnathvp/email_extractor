@@ -34,6 +34,9 @@ export function App() {
   const [loading, setLoading] = useState<boolean>(false);
   const [isReceiving, setIsReceiving] = useState<boolean>(false);
 
+  // Multi-select for emails
+  const [selectedEmailIds, setSelectedEmailIds] = useState<number[]>([]);
+
   // Selected email for reading pane
   const [selectedEmail, setSelectedEmail] = useState<Email | null>(null);
 
@@ -48,9 +51,9 @@ export function App() {
     setTimeout(() => setToast(null), 5000);
   };
 
-  // Fetch emails and categorized files
-  const loadData = () => {
-    setLoading(true);
+  // Fetch emails and categorized files (fast from Supabase)
+  const loadData = (showSpinner = false) => {
+    if (showSpinner) setLoading(true);
     Promise.all([
       api.getEmails({ page: 1, page_size: 100, search: search.trim() || undefined }),
       api.getFiles({ page: 1, page_size: 100, search: search.trim() || undefined, sort_by: 'date', sort_order: 'desc' }),
@@ -67,18 +70,18 @@ export function App() {
   };
 
   useEffect(() => {
-    loadData();
+    loadData(true);
   }, []);
 
   // Search debounce
   useEffect(() => {
     const timer = setTimeout(() => {
-      loadData();
+      loadData(false);
     }, 300);
     return () => clearTimeout(timer);
   }, [search]);
 
-  // Periodic inbox check (every 8s)
+  // Periodic background check (every 30s)
   useEffect(() => {
     const interval = setInterval(() => {
       api.getEmails({ page: 1, page_size: 100, search: search.trim() || undefined })
@@ -87,16 +90,64 @@ export function App() {
       api.getFiles({ page: 1, page_size: 100, search: search.trim() || undefined, sort_by: 'date', sort_order: 'desc' })
         .then((res) => setFiles(res.items))
         .catch(() => {});
-    }, 8000);
+    }, 30000);
     return () => clearInterval(interval);
   }, [search]);
+
+  // Email Selection Handlers
+  const handleToggleEmailSelect = (id: number) => {
+    setSelectedEmailIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleSelectAllEmails = () => {
+    if (selectedEmailIds.length === emails.length && emails.length > 0) {
+      setSelectedEmailIds([]);
+    } else {
+      setSelectedEmailIds(emails.map((e) => e.id));
+    }
+  };
+
+  const handleDeleteSelectedEmails = async () => {
+    if (selectedEmailIds.length === 0) return;
+    if (!window.confirm(`Are you sure you want to delete ${selectedEmailIds.length} selected email${selectedEmailIds.length > 1 ? 's' : ''}?`)) return;
+
+    try {
+      await api.batchDeleteEmails(selectedEmailIds);
+      const count = selectedEmailIds.length;
+      setSelectedEmailIds([]);
+      if (selectedEmail && selectedEmailIds.includes(selectedEmail.id)) {
+        setSelectedEmail(null);
+      }
+      loadData(false);
+      showToast(`Deleted ${count} email(s) from Supabase.`);
+    } catch (err: any) {
+      showToast(`Delete failed: ${err.message || err}`);
+    }
+  };
+
+  const handleDeleteSingleEmail = async (id: number, subject?: string) => {
+    if (!window.confirm(`Delete email "${subject || '(No Subject)'}"?`)) return;
+    try {
+      await api.deleteEmail(id);
+      setSelectedEmailIds((prev) => prev.filter((item) => item !== id));
+      if (selectedEmail && selectedEmail.id === id) {
+        setSelectedEmail(null);
+      }
+      loadData(false);
+      showToast('Email deleted from Supabase.');
+    } catch (err: any) {
+      showToast(`Delete failed: ${err.message || err}`);
+    }
+  };
 
   // Receive a new incoming email from an external sender (test intake)
   const handleReceiveEmail = async () => {
     setIsReceiving(true);
     try {
       const res = await api.simulateEmail('standard');
-      loadData();
+      loadData(false);
       showToast(res.message || `Received incoming email to ${MY_EMAIL} and arranged all attachments!`);
     } catch (err: any) {
       showToast(`Intake error: ${err.message || err}`);
@@ -110,7 +161,7 @@ export function App() {
     setIsReceiving(true);
     try {
       const res = await api.triggerProcess();
-      loadData();
+      loadData(false);
       showToast(res.message || 'Checked inbox for incoming emails.');
     } catch (err: any) {
       showToast(`Check error: ${err.message || err}`);
@@ -123,8 +174,8 @@ export function App() {
     if (!window.confirm('Delete this file from storage?')) return;
     try {
       await api.deleteFile(id);
-      loadData();
-      showToast('File deleted.');
+      loadData(false);
+      showToast('File deleted from Supabase.');
     } catch (err: any) {
       showToast(`Delete failed: ${err.message}`);
     }
@@ -278,16 +329,41 @@ export function App() {
           <div className="h-12 px-4 border-b border-[#f1f3f4] flex items-center justify-between bg-white shrink-0 select-none">
             <div className="flex items-center space-x-2">
               {selectedEmail ? (
-                <button
-                  onClick={() => setSelectedEmail(null)}
-                  className="flex items-center space-x-1 p-1.5 hover:bg-[#f1f3f4] rounded-full text-[#5f6368] hover:text-[#202124] transition-colors"
-                >
-                  <ArrowLeft className="w-4 h-4" />
-                  <span className="text-xs font-medium pl-1">Back to Inbox</span>
-                </button>
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={() => setSelectedEmail(null)}
+                    className="flex items-center space-x-1 p-1.5 hover:bg-[#f1f3f4] rounded-full text-[#5f6368] hover:text-[#202124] transition-colors"
+                  >
+                    <ArrowLeft className="w-4 h-4" />
+                    <span className="text-xs font-medium pl-1">Back to Inbox</span>
+                  </button>
+                  <span className="text-[#80868b]">|</span>
+                  <button
+                    onClick={() => handleDeleteSingleEmail(selectedEmail.id, selectedEmail.subject)}
+                    className="inline-flex items-center space-x-1 px-2.5 py-1 rounded hover:bg-red-50 text-gray-600 hover:text-red-600 font-medium text-xs transition-colors"
+                    title="Delete this email"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                    <span>Delete</span>
+                  </button>
+                </div>
               ) : (
                 <div className="flex items-center space-x-3 text-xs font-medium text-[#444746]">
-                  <input type="checkbox" className="rounded text-[#1a73e8] focus:ring-0 cursor-pointer" />
+                  {currentFolder === 'INBOX' && (
+                    <input
+                      type="checkbox"
+                      checked={selectedEmailIds.length === emails.length && emails.length > 0}
+                      ref={(el) => {
+                        if (el) {
+                          el.indeterminate = selectedEmailIds.length > 0 && selectedEmailIds.length < emails.length;
+                        }
+                      }}
+                      onChange={handleSelectAllEmails}
+                      className="rounded text-[#1a73e8] focus:ring-0 cursor-pointer w-4 h-4"
+                      title={selectedEmailIds.length === emails.length && emails.length > 0 ? 'Deselect all' : 'Select all'}
+                    />
+                  )}
+
                   <button
                     onClick={handleRefresh}
                     disabled={isReceiving}
@@ -296,10 +372,29 @@ export function App() {
                   >
                     <RefreshCw className={`w-4 h-4 ${isReceiving ? 'animate-spin text-[#1a73e8]' : ''}`} />
                   </button>
-                  <span className="text-[#80868b]">|</span>
-                  <span className="font-semibold text-[#1f1f1f]">
-                    {currentFolder === 'INBOX' ? 'Incoming Mails' : `${currentFolder} Folder (storage/${currentFolder.toLowerCase()}/)`}
-                  </span>
+
+                  {selectedEmailIds.length > 0 ? (
+                    <div className="flex items-center space-x-2 pl-2 border-l border-[#dadce0]">
+                      <span className="font-bold text-[#1a73e8] text-xs">
+                        {selectedEmailIds.length} selected
+                      </span>
+                      <button
+                        onClick={handleDeleteSelectedEmails}
+                        className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 font-semibold text-xs border border-red-200 transition-colors shadow-xs"
+                        title="Delete selected emails"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Delete ({selectedEmailIds.length})</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <span className="text-[#80868b]">|</span>
+                      <span className="font-semibold text-[#1f1f1f]">
+                        {currentFolder === 'INBOX' ? `Incoming Mails (${emails.length})` : `${currentFolder} Folder`}
+                      </span>
+                    </>
+                  )}
                 </div>
               )}
             </div>
@@ -412,8 +507,11 @@ export function App() {
               </div>
             ) : currentFolder === 'INBOX' ? (
               /* Inbox: List of Incoming Emails */
-              loading ? (
-                <div className="p-12 text-center text-xs text-[#5f6368]">Checking incoming emails...</div>
+              loading && emails.length === 0 ? (
+                <div className="p-12 text-center text-xs text-[#5f6368] flex flex-col items-center justify-center space-y-2">
+                  <RefreshCw className="w-5 h-5 animate-spin text-[#1a73e8]" />
+                  <span>Loading emails from Supabase...</span>
+                </div>
               ) : emails.length === 0 ? (
                 <div className="p-16 text-center space-y-2">
                   <Mail className="w-10 h-10 text-[#dadce0] mx-auto" />
@@ -422,37 +520,58 @@ export function App() {
                 </div>
               ) : (
                 <div className="divide-y divide-[#f1f3f4]">
-                  {emails.map((email) => (
-                    <div
-                      key={email.id}
-                      onClick={() => setSelectedEmail(email)}
-                      className="px-4 py-3 hover:bg-[#f8fafd] cursor-pointer transition-colors text-xs group flex flex-col space-y-2"
-                    >
-                      {/* Main Email Header Row: Checkbox, Sender, Subject, Snippet, Date */}
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-3 flex-1 min-w-0 pr-4">
-                          <div onClick={(e) => e.stopPropagation()} className="shrink-0">
-                            <input type="checkbox" className="rounded text-[#1a73e8] focus:ring-0 cursor-pointer" />
+                  {emails.map((email) => {
+                    const isSelected = selectedEmailIds.includes(email.id);
+                    return (
+                      <div
+                        key={email.id}
+                        onClick={() => setSelectedEmail(email)}
+                        className={`px-4 py-3 cursor-pointer transition-colors text-xs group flex flex-col space-y-2 ${
+                          isSelected ? 'bg-[#e8f0fe]' : 'hover:bg-[#f8fafd]'
+                        }`}
+                      >
+                        {/* Main Email Header Row: Checkbox, Sender, Subject, Snippet, Date, Delete Action */}
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-3 flex-1 min-w-0 pr-4">
+                            <div onClick={(e) => e.stopPropagation()} className="shrink-0">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => handleToggleEmailSelect(email.id)}
+                                className="rounded text-[#1a73e8] focus:ring-0 cursor-pointer w-3.5 h-3.5"
+                              />
+                            </div>
+
+                            <div className="w-44 font-bold text-[#202124] truncate shrink-0">
+                              {email.sender.replace(/<.*>/, '').trim() || email.sender}
+                            </div>
+
+                            <div className="flex items-center space-x-2 truncate">
+                              <span className="font-semibold text-[#1f1f1f] truncate shrink-0 max-w-sm">
+                                {email.subject || '(No Subject)'}
+                              </span>
+                              <span className="text-[#5f6368] truncate text-[11px] hidden md:inline">
+                                — {email.body ? email.body.slice(0, 80) : 'No preview available'}
+                              </span>
+                            </div>
                           </div>
 
-                          <div className="w-44 font-bold text-[#202124] truncate shrink-0">
-                            {email.sender.replace(/<.*>/, '').trim() || email.sender}
-                          </div>
-
-                          <div className="flex items-center space-x-2 truncate">
-                            <span className="font-semibold text-[#1f1f1f] truncate shrink-0 max-w-sm">
-                              {email.subject || '(No Subject)'}
+                          <div className="flex items-center space-x-2 shrink-0">
+                            <span className="text-right text-[11px] font-medium text-[#5f6368] font-mono">
+                              {email.received_at ? new Date(email.received_at).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}
                             </span>
-                            <span className="text-[#5f6368] truncate text-[11px] hidden md:inline">
-                              — {email.body ? email.body.slice(0, 80) : 'No preview available'}
-                            </span>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteSingleEmail(email.id, email.subject);
+                              }}
+                              className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-50 text-gray-400 hover:text-red-500 rounded transition-all"
+                              title="Delete this email"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
                           </div>
                         </div>
-
-                        <div className="text-right text-[11px] font-medium text-[#5f6368] font-mono shrink-0">
-                          {email.received_at ? new Date(email.received_at).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}
-                        </div>
-                      </div>
 
                       {/* Attachment Files: Prominently displayed beneath the email row */}
                       {email.attachments && email.attachments.length > 0 && (
@@ -482,9 +601,10 @@ export function App() {
                         </div>
                       )}
                     </div>
-                  ))}
-                </div>
-              )
+                  );
+                })}
+              </div>
+            )
             ) : (
               /* Specific Folder View (PDF, JPG, Video, Audio, Other) */
               loading ? (
