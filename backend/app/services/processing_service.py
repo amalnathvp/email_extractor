@@ -49,7 +49,7 @@ class ProcessingService:
         created_file_paths: List[Path] = []
 
         try:
-            # 4. Extract, classify, and store each attachment
+            # 4. Extract, classify, and store each attachment directly in Supabase
             for att in parsed.attachments:
                 # Classify
                 category, validated_mime, subdir = ClassificationService.classify(
@@ -58,15 +58,11 @@ class ProcessingService:
                     declared_mime=att.content_type
                 )
 
-                # Store file securely
-                stored_filename, relative_path, file_size = StorageService.store_file(
-                    original_filename=att.filename,
-                    content=att.content,
-                    category_subdir=subdir
-                )
-                created_file_paths.append(settings.STORAGE_PATH / relative_path)
+                stored_filename = StorageService.generate_stored_filename(att.filename)
+                relative_path = f"{subdir}/{stored_filename}"
+                file_size = len(att.content)
 
-                # Create DB attachment record
+                # Create DB attachment record storing binary data directly in Supabase
                 db_att = Attachment(
                     email_id=email_record.id,
                     original_filename=att.filename,

@@ -98,76 +98,38 @@ def get_file_metadata(file_id: int, db: Session = Depends(get_db)):
 
 @router.get("/{file_id}/download")
 def download_file(file_id: int, db: Session = Depends(get_db)):
-    """Streams file for download with appropriate Content-Disposition header."""
+    """Streams file for download directly from Supabase binary storage."""
     att = db.query(Attachment).filter(Attachment.id == file_id).first()
-    if not att:
-        raise HTTPException(status_code=404, detail="File attachment not found")
+    if not att or not att.file_data:
+        raise HTTPException(status_code=404, detail="File attachment not found in Supabase")
 
-    try:
-        file_path = StorageService.get_absolute_path(att.storage_path)
-        if file_path.is_file():
-            return FileResponse(
-                path=str(file_path),
-                media_type=att.mime_type or "application/octet-stream",
-                filename=att.original_filename,
-                content_disposition_type="attachment"
-            )
-    except Exception:
-        pass
-
-    # Serverless fallback: serve directly from Supabase binary storage
-    if att.file_data:
-        return Response(
-            content=bytes(att.file_data),
-            media_type=att.mime_type or "application/octet-stream",
-            headers={"Content-Disposition": f'attachment; filename="{att.original_filename}"'}
-        )
-
-    raise HTTPException(status_code=404, detail="File content missing on storage system")
+    return Response(
+        content=bytes(att.file_data),
+        media_type=att.mime_type or "application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{att.original_filename}"'}
+    )
 
 @router.get("/{file_id}/preview")
 def preview_file(file_id: int, db: Session = Depends(get_db)):
-    """Streams file inline for browser preview (PDFs, images, text)."""
+    """Streams file inline for browser preview directly from Supabase binary storage."""
     att = db.query(Attachment).filter(Attachment.id == file_id).first()
-    if not att:
-        raise HTTPException(status_code=404, detail="File attachment not found")
+    if not att or not att.file_data:
+        raise HTTPException(status_code=404, detail="File attachment not found in Supabase")
 
-    try:
-        file_path = StorageService.get_absolute_path(att.storage_path)
-        if file_path.is_file():
-            return FileResponse(
-                path=str(file_path),
-                media_type=att.mime_type or "application/octet-stream",
-                content_disposition_type="inline"
-            )
-    except Exception:
-        pass
-
-    # Serverless fallback: serve directly from Supabase binary storage
-    if att.file_data:
-        return Response(
-            content=bytes(att.file_data),
-            media_type=att.mime_type or "application/octet-stream",
-            headers={"Content-Disposition": f'inline; filename="{att.original_filename}"'}
-        )
-
-    raise HTTPException(status_code=404, detail="File content missing on storage system")
+    return Response(
+        content=bytes(att.file_data),
+        media_type=att.mime_type or "application/octet-stream",
+        headers={"Content-Disposition": f'inline; filename="{att.original_filename}"'}
+    )
 
 @router.delete("/{file_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_file(file_id: int, db: Session = Depends(get_db)):
-    """Deletes a file attachment from disk and database."""
+    """Deletes a file attachment directly from Supabase."""
     att = db.query(Attachment).filter(Attachment.id == file_id).first()
     if not att:
         raise HTTPException(status_code=404, detail="File attachment not found")
 
-    try:
-        file_path = StorageService.get_absolute_path(att.storage_path)
-        if file_path.is_file():
-            file_path.unlink()
-            logger.info(f"Deleted file from storage: {file_path}")
-    except Exception as e:
-        logger.warning(f"Error removing file from disk during deletion: {e}")
-
     db.delete(att)
     db.commit()
+    logger.info(f"Deleted file attachment from Supabase: ID {file_id} ({att.original_filename})")
     return None

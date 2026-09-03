@@ -38,8 +38,9 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
         OTHER=cat_dict.get("OTHER", 0),
     )
 
-    # Storage stats
-    total_bytes, formatted_storage = StorageService.get_storage_stats()
+    # Storage stats directly from Supabase database
+    total_bytes = db.query(func.coalesce(func.sum(Attachment.file_size), 0)).scalar() or 0
+    formatted_storage = StorageService.format_bytes(total_bytes)
 
     # Most recent processed email time
     last_email = db.query(Email.processed_at).filter(Email.processed_at != None).order_by(desc(Email.processed_at)).first()
