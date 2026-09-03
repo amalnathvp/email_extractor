@@ -1,7 +1,7 @@
 import logging
 import sys
 from pathlib import Path
-from backend.app.core.config import DEFAULT_LOGS_DIR
+from backend.app.core.config import DEFAULT_LOGS_DIR, IS_VERCEL
 
 LOG_FILE = DEFAULT_LOGS_DIR / "app.log"
 
@@ -26,14 +26,16 @@ def setup_logging(log_level: int = logging.INFO) -> logging.Logger:
     console_handler.setLevel(log_level)
     logger.addHandler(console_handler)
 
-    # File handler
-    try:
-        file_handler = logging.FileHandler(str(LOG_FILE), encoding="utf-8")
-        file_handler.setFormatter(formatter)
-        file_handler.setLevel(log_level)
-        logger.addHandler(file_handler)
-    except Exception as e:
-        sys.stderr.write(f"Warning: Failed to create log file handler: {e}\n")
+    # File handler (local dev only, skip on Vercel serverless)
+    if not IS_VERCEL:
+        try:
+            DEFAULT_LOGS_DIR.mkdir(parents=True, exist_ok=True)
+            file_handler = logging.FileHandler(str(LOG_FILE), encoding="utf-8")
+            file_handler.setFormatter(formatter)
+            file_handler.setLevel(log_level)
+            logger.addHandler(file_handler)
+        except Exception:
+            pass
 
     return logger
 

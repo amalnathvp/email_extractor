@@ -59,6 +59,9 @@ class Settings(BaseSettings):
 
     @field_validator("STORAGE_PATH", mode="before")
     def assemble_storage_path(cls, v: Union[str, Path]) -> Path:
+        # If on Vercel or if Windows path detected in Linux container, ignore it safely
+        if IS_VERCEL or not v or ":" in str(v) or "\\" in str(v) or str(v).startswith("C:"):
+            return Path("/tmp/storage")
         if isinstance(v, str):
             p = Path(v)
             if not p.is_absolute():
@@ -68,10 +71,10 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
-# Ensure directories exist
-settings.STORAGE_PATH.mkdir(parents=True, exist_ok=True)
-DEFAULT_LOGS_DIR.mkdir(parents=True, exist_ok=True)
-
-# Pre-create category directories
-for category in ["pdf", "images", "documents", "spreadsheets", "presentations", "others"]:
-    (settings.STORAGE_PATH / category).mkdir(parents=True, exist_ok=True)
+# Ensure directories exist only in local development (never in serverless read-only container)
+if not IS_VERCEL:
+    try:
+        settings.STORAGE_PATH.mkdir(parents=True, exist_ok=True)
+        DEFAULT_LOGS_DIR.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
