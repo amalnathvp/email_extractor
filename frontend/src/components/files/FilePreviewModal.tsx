@@ -96,6 +96,36 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({ file, onClos
       );
     }
 
+    // 2b. Video Preview
+    if (file.file_category === 'VIDEO' || file.mime_type.startsWith('video/')) {
+      return (
+        <div className="w-full h-[520px] flex items-center justify-center bg-zinc-950/90 rounded-lg p-4 border border-zinc-800/80">
+          <video
+            controls
+            autoPlay
+            src={previewUrl}
+            className="max-h-full max-w-full rounded shadow-xl"
+          >
+            Your browser does not support video playback.
+          </video>
+        </div>
+      );
+    }
+
+    // 2c. Audio Preview
+    if (file.file_category === 'AUDIO' || file.mime_type.startsWith('audio/')) {
+      return (
+        <div className="w-full h-[300px] flex flex-col items-center justify-center bg-zinc-950/90 rounded-lg p-8 border border-zinc-800/80 space-y-4">
+          <div className="w-16 h-16 rounded-full bg-emerald-600/20 text-emerald-400 flex items-center justify-center">
+            🎵
+          </div>
+          <audio controls autoPlay src={previewUrl} className="w-full max-w-md">
+            Your browser does not support audio playback.
+          </audio>
+        </div>
+      );
+    }
+
     // 3. Text / CSV Preview
     if (textContent !== null) {
       return (

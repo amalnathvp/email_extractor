@@ -19,7 +19,7 @@ EXTENSION_CATEGORIES = {
     # PDF
     ".pdf": FileCategory.PDF,
     
-    # Images
+    # Images (jpg folder)
     ".jpg": FileCategory.IMAGE,
     ".jpeg": FileCategory.IMAGE,
     ".png": FileCategory.IMAGE,
@@ -28,6 +28,25 @@ EXTENSION_CATEGORIES = {
     ".bmp": FileCategory.IMAGE,
     ".svg": FileCategory.IMAGE,
     
+    # Video
+    ".mp4": FileCategory.VIDEO,
+    ".mov": FileCategory.VIDEO,
+    ".avi": FileCategory.VIDEO,
+    ".mkv": FileCategory.VIDEO,
+    ".webm": FileCategory.VIDEO,
+    ".flv": FileCategory.VIDEO,
+    ".wmv": FileCategory.VIDEO,
+    ".m4v": FileCategory.VIDEO,
+
+    # Audio
+    ".mp3": FileCategory.AUDIO,
+    ".wav": FileCategory.AUDIO,
+    ".aac": FileCategory.AUDIO,
+    ".ogg": FileCategory.AUDIO,
+    ".m4a": FileCategory.AUDIO,
+    ".flac": FileCategory.AUDIO,
+    ".wma": FileCategory.AUDIO,
+
     # Documents
     ".doc": FileCategory.DOCUMENT,
     ".docx": FileCategory.DOCUMENT,
@@ -46,10 +65,12 @@ EXTENSION_CATEGORIES = {
     ".pptx": FileCategory.PRESENTATION,
 }
 
-# Subdirectory folder mapping for each category
+# Subdirectory folder mapping for each category (PDF, JPG, Video, Audio, Others)
 CATEGORY_SUBDIRS = {
     FileCategory.PDF: "pdf",
-    FileCategory.IMAGE: "images",
+    FileCategory.IMAGE: "jpg",
+    FileCategory.VIDEO: "video",
+    FileCategory.AUDIO: "audio",
     FileCategory.DOCUMENT: "documents",
     FileCategory.SPREADSHEET: "spreadsheets",
     FileCategory.PRESENTATION: "presentations",
@@ -140,11 +161,23 @@ class ClassificationService:
             category = FileCategory.PDF
             resolved_mime = "application/pdf"
 
-        # 2. Image check
+        # 2. Image / JPG check
         elif resolved_mime.startswith("image/") or ext in [".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg"]:
             category = FileCategory.IMAGE
             if not resolved_mime.startswith("image/"):
                 resolved_mime = guessed_mime or "image/jpeg"
+
+        # 3. Video check
+        elif resolved_mime.startswith("video/") or ext in [".mp4", ".mov", ".avi", ".mkv", ".webm", ".flv", ".wmv", ".m4v"]:
+            category = FileCategory.VIDEO
+            if not resolved_mime.startswith("video/"):
+                resolved_mime = guessed_mime or "video/mp4"
+
+        # 4. Audio check
+        elif resolved_mime.startswith("audio/") or ext in [".mp3", ".wav", ".aac", ".ogg", ".m4a", ".flac", ".wma"]:
+            category = FileCategory.AUDIO
+            if not resolved_mime.startswith("audio/"):
+                resolved_mime = guessed_mime or "audio/mpeg"
 
         # 3. Spreadsheets check
         elif (

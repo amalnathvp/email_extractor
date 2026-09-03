@@ -1,6 +1,8 @@
 export type FileCategory =
   | 'PDF'
   | 'IMAGE'
+  | 'VIDEO'
+  | 'AUDIO'
   | 'DOCUMENT'
   | 'SPREADSHEET'
   | 'PRESENTATION'
@@ -36,6 +38,7 @@ export interface Email {
   error_message?: string;
   created_at: string;
   attachment_count: number;
+  attachments?: Attachment[];
 }
 
 export interface EmailDetail extends Email {

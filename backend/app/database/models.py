@@ -24,6 +24,8 @@ class EmailStatus(str, enum.Enum):
 class FileCategory(str, enum.Enum):
     PDF = "PDF"
     IMAGE = "IMAGE"
+    VIDEO = "VIDEO"
+    AUDIO = "AUDIO"
     DOCUMENT = "DOCUMENT"
     SPREADSHEET = "SPREADSHEET"
     PRESENTATION = "PRESENTATION"

@@ -92,6 +92,14 @@ export const api = {
 
   // Process & Simulation
   triggerProcess: () => fetchApi<ProcessResult>('/process', { method: 'POST' }),
+  sendViaMailtrap: (subject?: string, text?: string) =>
+    fetchApi<{ success: boolean; message: string; files_sorted: any[] }>('/process/mailtrap', {
+      method: 'POST',
+      body: JSON.stringify({
+        subject: subject || 'You are awesome!',
+        text: text || 'Congrats for sending test email with Mailtrap!',
+      }),
+    }),
   simulateEmail: (scenario: string = 'standard') =>
     fetchApi<ProcessResult>(`/process/simulate?scenario=${scenario}`, { method: 'POST' }),
   getWorkerStatus: () => fetchApi<WorkerStatus>('/process/status'),

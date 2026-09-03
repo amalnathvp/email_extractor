@@ -28,12 +28,18 @@ class EmailService:
         use_ssl: Optional[bool] = None,
         folder: Optional[str] = None
     ):
-        self.host = host or settings.EMAIL_HOST
+        self.host = (host or settings.EMAIL_HOST or "").strip()
         self.port = port or settings.EMAIL_PORT
-        self.username = username or settings.EMAIL_USERNAME
-        self.password = password or settings.EMAIL_PASSWORD
+        self.username = (username or settings.EMAIL_USERNAME or "").strip()
+        
+        # Clean password (remove surrounding quotes and handle 16-character Google app passwords formatted with spaces)
+        raw_pw = (password or settings.EMAIL_PASSWORD or "").strip().strip('"').strip("'")
+        if "gmail" in self.host.lower() and len(raw_pw.replace(" ", "")) == 16:
+            raw_pw = raw_pw.replace(" ", "")
+        self.password = raw_pw
+
         self.use_ssl = use_ssl if use_ssl is not None else settings.EMAIL_USE_SSL
-        self.folder = folder or settings.EMAIL_FOLDER
+        self.folder = (folder or settings.EMAIL_FOLDER or "INBOX").strip()
 
     def _create_client(self) -> IMAPClient:
         """Creates and connects an IMAPClient instance."""
@@ -66,7 +72,18 @@ class EmailService:
                 return True, f"Successfully connected to {self.host} and opened '{self.folder}'"
         except Exception as e:
             err_msg = str(e)
+            if isinstance(e, bytes):
+                err_msg = e.decode("utf-8", errors="replace")
             logger.warning(f"IMAP test connection failed: {err_msg}")
+            
+            if "AUTHENTICATIONFAILED" in err_msg or "Invalid credentials" in err_msg:
+                if "gmail" in self.host.lower():
+                    err_msg = (
+                        "Invalid credentials. For Gmail, you MUST use a 16-character Google App Password, "
+                        "NOT your regular Gmail password. (Visit https://myaccount.google.com/apppasswords to create one)."
+                    )
+                else:
+                    err_msg = "Invalid credentials. Please verify your email and app password."
             return False, f"Connection error: {err_msg}"
 
     def fetch_unprocessed_emails(
@@ -93,8 +110,15 @@ class EmailService:
                 try:
                     client.login(self.username, self.password)
                 except Exception as e:
-                    logger.error("IMAP login failed. Check EMAIL_USERNAME and EMAIL_PASSWORD.")
-                    raise EmailAuthenticationError(f"Authentication failed: {e}")
+                    err = str(e)
+                    if "AUTHENTICATIONFAILED" in err or "Invalid credentials" in err:
+                        if "gmail" in self.host.lower():
+                            err = (
+                                "Invalid Gmail credentials. You must use a 16-character Google App Password, "
+                                "NOT your account password (https://myaccount.google.com/apppasswords)."
+                            )
+                    logger.error(f"IMAP login failed: {err}")
+                    raise EmailAuthenticationError(f"Authentication failed: {err}")
 
                 client.select_folder(self.folder, readonly=False)
                 logger.info(f"Opened IMAP folder '{self.folder}', searching with criteria: '{search_criteria}'")

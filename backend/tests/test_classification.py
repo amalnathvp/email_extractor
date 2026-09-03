@@ -20,14 +20,28 @@ def test_classify_png_image():
     cat, mime, subdir = ClassificationService.classify("image.bin", png_bytes, "application/octet-stream")
     assert cat == FileCategory.IMAGE
     assert mime == "image/png"
-    assert subdir == "images"
+    assert subdir == "jpg"
 
 def test_classify_jpeg_image():
     jpeg_bytes = b"\xff\xd8\xff\xe0"
     cat, mime, subdir = ClassificationService.classify("photo.jpg", jpeg_bytes, "image/jpeg")
     assert cat == FileCategory.IMAGE
     assert mime == "image/jpeg"
-    assert subdir == "images"
+    assert subdir == "jpg"
+
+def test_classify_video_mp4():
+    video_bytes = b"\x00\x00\x00\x18ftypmp42"
+    cat, mime, subdir = ClassificationService.classify("movie.mp4", video_bytes, "video/mp4")
+    assert cat == FileCategory.VIDEO
+    assert mime == "video/mp4"
+    assert subdir == "video"
+
+def test_classify_audio_mp3():
+    audio_bytes = b"ID3\x03\x00\x00\x00\x00\x00#TIT2"
+    cat, mime, subdir = ClassificationService.classify("song.mp3", audio_bytes, "audio/mpeg")
+    assert cat == FileCategory.AUDIO
+    assert mime == "audio/mpeg"
+    assert subdir == "audio"
 
 def test_classify_spreadsheet_csv():
     csv_bytes = b"Col1,Col2\nVal1,Val2"
