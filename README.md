@@ -151,7 +151,6 @@ Email/
 │   │   ├── video/
 │   │   ├── audio/
 │   │   └── others/
-│   ├── tests/                     # 25 automated unit tests
 │   ├── .env                       # Environment variables (Zoho & Supabase)
 │   └── requirements.txt
 ├── frontend/
@@ -233,21 +232,6 @@ POLL_INTERVAL_SECONDS=30
    ```
 2. Open your browser at:
    - **Web App**: [http://localhost:5173](http://localhost:5173)
-
----
-
-## Running the Automated Test Suite
-
-The test suite covers classification, binary magic-byte detection, idempotency, MIME header decoding, path-traversal security, and REST API endpoints:
-
-```powershell
-python -m pytest backend/tests -v
-```
-
-Output:
-```text
-======================== 25 passed in 4.94s ========================
-```
 
 ---
 

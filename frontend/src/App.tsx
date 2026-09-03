@@ -11,7 +11,6 @@ import {
   Download,
   Eye,
   Trash2,
-  Star,
   Paperclip,
   X,
   ArrowLeft,
@@ -21,6 +20,7 @@ import {
 import { Attachment, Email } from './types';
 import { api } from './api/client';
 import { FilePreviewModal } from './components/files/FilePreviewModal';
+import { FileGalleryCard } from './components/files/FileGalleryCard';
 
 const MY_EMAIL = 'amalnathvp@zohomail.in';
 
@@ -426,43 +426,61 @@ export function App() {
                     <div
                       key={email.id}
                       onClick={() => setSelectedEmail(email)}
-                      className="flex items-center px-4 py-3 hover:shadow-md hover:bg-[#f2f6fc] cursor-pointer transition-all text-xs group"
+                      className="px-4 py-3 hover:bg-[#f8fafd] cursor-pointer transition-colors text-xs group flex flex-col space-y-2"
                     >
-                      <div className="flex items-center space-x-3 mr-3 text-[#c4c7c5]" onClick={(e) => e.stopPropagation()}>
-                        <input type="checkbox" className="rounded text-[#1a73e8] focus:ring-0 cursor-pointer" />
-                        <Star className="w-4 h-4 hover:text-[#f4b400] text-[#dadce0] cursor-pointer" />
-                      </div>
-
-                      <div className="w-48 font-semibold text-[#202124] truncate shrink-0">
-                        {email.sender.replace(/<.*>/, '').trim() || email.sender}
-                      </div>
-
-                      <div className="flex-1 flex items-center space-x-2 truncate pr-4">
-                        <span className="font-medium text-[#202124] shrink-0 truncate max-w-xs">{email.subject || '(No Subject)'}</span>
-                        <span className="text-[#5f6368] truncate shrink-0">— {email.body ? email.body.slice(0, 60) : 'Deliverables'}</span>
-
-                        {email.attachments && email.attachments.length > 0 && (
-                          <div className="flex items-center space-x-1.5 ml-2 overflow-hidden" onClick={(e) => e.stopPropagation()}>
-                            <Paperclip className="w-3.5 h-3.5 text-[#5f6368] shrink-0" />
-                            {email.attachments.slice(0, 3).map((att) => (
-                              <button
-                                key={att.id}
-                                onClick={() => setPreviewFile(att)}
-                                className="px-2 py-0.5 rounded-full border border-[#dadce0] bg-white hover:bg-[#e8eaed] text-[11px] text-[#444746] font-medium flex items-center space-x-1 shrink-0"
-                              >
-                                <span className="truncate max-w-[120px]">{att.original_filename}</span>
-                              </button>
-                            ))}
-                            {email.attachments.length > 3 && (
-                              <span className="text-[10px] text-[#5f6368]">+{email.attachments.length - 3}</span>
-                            )}
+                      {/* Main Email Header Row: Checkbox, Sender, Subject, Snippet, Date */}
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-3 flex-1 min-w-0 pr-4">
+                          <div onClick={(e) => e.stopPropagation()} className="shrink-0">
+                            <input type="checkbox" className="rounded text-[#1a73e8] focus:ring-0 cursor-pointer" />
                           </div>
-                        )}
+
+                          <div className="w-44 font-bold text-[#202124] truncate shrink-0">
+                            {email.sender.replace(/<.*>/, '').trim() || email.sender}
+                          </div>
+
+                          <div className="flex items-center space-x-2 truncate">
+                            <span className="font-semibold text-[#1f1f1f] truncate shrink-0 max-w-sm">
+                              {email.subject || '(No Subject)'}
+                            </span>
+                            <span className="text-[#5f6368] truncate text-[11px] hidden md:inline">
+                              — {email.body ? email.body.slice(0, 80) : 'No preview available'}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="text-right text-[11px] font-medium text-[#5f6368] font-mono shrink-0">
+                          {email.received_at ? new Date(email.received_at).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}
+                        </div>
                       </div>
 
-                      <div className="w-20 text-right text-[11px] font-medium text-[#5f6368] font-mono shrink-0">
-                        {email.received_at ? new Date(email.received_at).toLocaleDateString([], { month: 'short', day: 'numeric' }) : ''}
-                      </div>
+                      {/* Attachment Files: Prominently displayed beneath the email row */}
+                      {email.attachments && email.attachments.length > 0 && (
+                        <div className="flex items-center space-x-2 pl-7 flex-wrap gap-y-1.5" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center space-x-1 text-[#5f6368] font-medium text-[11px] mr-1 shrink-0">
+                            <Paperclip className="w-3.5 h-3.5 text-[#1a73e8]" />
+                            <span>{email.attachments.length} attachment{email.attachments.length > 1 ? 's' : ''}:</span>
+                          </div>
+                          {email.attachments.map((att) => (
+                            <a
+                              key={att.id}
+                              href={api.getFileDownloadUrl(att.id)}
+                              download={att.original_filename}
+                              className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-lg border border-[#dadce0] bg-white hover:bg-[#e8f0fe] hover:border-[#1a73e8] text-[#1a73e8] font-medium text-[11px] transition-all shadow-xs group/att"
+                              title={`Click to download ${att.original_filename} (storage/${att.file_category.toLowerCase()}/ • ${formatBytes(att.file_size)})`}
+                            >
+                              {att.file_category === 'PDF' && <FileText className="w-3.5 h-3.5 text-red-500 shrink-0" />}
+                              {att.file_category === 'IMAGE' && <ImageIcon className="w-3.5 h-3.5 text-purple-500 shrink-0" />}
+                              {att.file_category === 'VIDEO' && <Video className="w-3.5 h-3.5 text-blue-500 shrink-0" />}
+                              {att.file_category === 'AUDIO' && <Music className="w-3.5 h-3.5 text-emerald-500 shrink-0" />}
+                              {!['PDF', 'IMAGE', 'VIDEO', 'AUDIO'].includes(att.file_category) && <FolderArchive className="w-3.5 h-3.5 text-gray-500 shrink-0" />}
+                              <span className="font-semibold text-gray-800 group-hover/att:text-[#1a73e8]">{att.original_filename}</span>
+                              <span className="text-[10px] text-gray-500 font-mono">({formatBytes(att.file_size)})</span>
+                              <Download className="w-3 h-3 text-[#1a73e8] opacity-70 group-hover/att:opacity-100 shrink-0" />
+                            </a>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -478,65 +496,15 @@ export function App() {
                   <p className="text-xs text-[#80868b]">Incoming {currentFolder} attachments will automatically be stored in storage/{currentFolder.toLowerCase()}/</p>
                 </div>
               ) : (
-                <div className="divide-y divide-[#f1f3f4]">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 p-5">
                   {filteredFiles.map((file) => (
-                    <div
+                    <FileGalleryCard
                       key={file.id}
-                      className="flex items-center justify-between px-4 py-3 hover:bg-[#f8fafd] transition-colors text-xs"
-                    >
-                      <div
-                        onClick={() => setPreviewFile(file)}
-                        className="flex items-center space-x-3 cursor-pointer flex-1 truncate max-w-xl group"
-                      >
-                        <div className="p-2 bg-[#f1f3f4] rounded-lg text-[#5f6368] shrink-0">
-                          {file.file_category === 'PDF' && <FileText className="w-4 h-4 text-red-600" />}
-                          {file.file_category === 'IMAGE' && <ImageIcon className="w-4 h-4 text-purple-600" />}
-                          {file.file_category === 'VIDEO' && <Video className="w-4 h-4 text-blue-600" />}
-                          {file.file_category === 'AUDIO' && <Music className="w-4 h-4 text-emerald-600" />}
-                          {!['PDF', 'IMAGE', 'VIDEO', 'AUDIO'].includes(file.file_category) && <FolderArchive className="w-4 h-4" />}
-                        </div>
-                        <div className="truncate">
-                          <span className="font-semibold text-[#1f1f1f] group-hover:text-[#1a73e8] transition-colors truncate block">
-                            {file.original_filename}
-                          </span>
-                          <span className="text-[11px] text-[#5f6368] truncate block">
-                            Sender: {file.sender || 'External Sender'} • Size: {formatBytes(file.file_size)} • Path: {file.storage_path}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center space-x-3">
-                        {getCategoryBadge(file.file_category)}
-                        <span className="text-[11px] text-[#5f6368] font-mono hidden sm:inline">
-                          {new Date(file.created_at).toLocaleDateString()}
-                        </span>
-
-                        <div className="flex items-center space-x-1">
-                          <button
-                            onClick={() => setPreviewFile(file)}
-                            className="p-1.5 hover:bg-[#e8eaed] rounded-full text-[#5f6368] hover:text-[#202124]"
-                            title="Preview File"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </button>
-                          <a
-                            href={api.getFileDownloadUrl(file.id)}
-                            download={file.original_filename}
-                            className="p-1.5 hover:bg-[#e8eaed] rounded-full text-[#5f6368] hover:text-[#202124]"
-                            title="Download File"
-                          >
-                            <Download className="w-4 h-4" />
-                          </a>
-                          <button
-                            onClick={() => handleDeleteFile(file.id)}
-                            className="p-1.5 hover:bg-[#e8eaed] rounded-full text-[#5f6368] hover:text-red-600"
-                            title="Delete File"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
+                      file={file}
+                      onPreview={(f) => setPreviewFile(f)}
+                      onDelete={handleDeleteFile}
+                      formatBytes={formatBytes}
+                    />
                   ))}
                 </div>
               )

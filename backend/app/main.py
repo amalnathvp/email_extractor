@@ -26,7 +26,7 @@ async def lifespan(app: FastAPI):
     else:
         logger.warning("DATABASE_URL is not configured yet. Please configure Supabase in backend/.env.")
 
-    if settings.AUTO_POLL_ENABLED and engine is not None:
+    if settings.AUTO_POLL_ENABLED and engine is not None and not os.environ.get("VERCEL"):
         logger.info(f"Auto-poll enabled. Starting background poller (interval: {settings.POLL_INTERVAL_SECONDS}s)")
         scheduler.start()
 

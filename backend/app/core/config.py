@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from typing import List, Union
 from pydantic import AnyHttpUrl, field_validator
@@ -5,8 +6,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Base directory for backend
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
-DEFAULT_STORAGE_DIR = BACKEND_DIR / "storage"
-DEFAULT_LOGS_DIR = BACKEND_DIR / "logs"
+IS_VERCEL = bool(os.environ.get("VERCEL") or os.environ.get("VERCEL_ENV"))
+DEFAULT_STORAGE_DIR = Path("/tmp/storage") if IS_VERCEL else BACKEND_DIR / "storage"
+DEFAULT_LOGS_DIR = Path("/tmp/logs") if IS_VERCEL else BACKEND_DIR / "logs"
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
