@@ -230,19 +230,4 @@ async def upload_eml_file(file: UploadFile = File(...), db: Session = Depends(ge
             message=f"Failed to process uploaded EML: {str(e)}"
         )
 
-from pydantic import BaseModel
 
-class MailtrapSendRequest(BaseModel):
-    subject: str = "You are awesome!"
-    text: str = "Congrats for sending test email with Mailtrap!"
-
-@router.post("/mailtrap")
-def send_via_mailtrap_and_sort(payload: Optional[MailtrapSendRequest] = None):
-    """
-    Sends email to macrovaniac1@gmail.com using Mailtrap API token,
-    and automatically categorizes attachments into pdf, jpg, video, audio folders.
-    """
-    from backend.app.services.mailtrap_service import MailtrapService
-    subj = payload.subject if payload else "You are awesome!"
-    txt = payload.text if payload else "Congrats for sending test email with Mailtrap!"
-    return MailtrapService.send_via_mailtrap(subject=subj, text=txt)

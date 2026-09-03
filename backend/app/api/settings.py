@@ -10,9 +10,9 @@ from backend.app.core.logging import logger
 router = APIRouter(prefix="/settings", tags=["Settings"])
 
 class EmailConfigInput(BaseModel):
-    email_host: str = "imap.gmail.com"
+    email_host: str = "imap.zoho.in"
     email_port: int = 993
-    email_username: str
+    email_username: str = "amalnathvp@zohomail.in"
     email_password: str
     email_use_ssl: bool = True
     email_folder: str = "INBOX"
@@ -31,9 +31,9 @@ class EmailConfigResponse(BaseModel):
     status_message: str
 
 class TestConnectionInput(BaseModel):
-    email_host: str = "imap.gmail.com"
+    email_host: str = "imap.zoho.in"
     email_port: int = 993
-    email_username: str
+    email_username: str = "amalnathvp@zohomail.in"
     email_password: str
     email_use_ssl: bool = True
     email_folder: str = "INBOX"
@@ -86,10 +86,11 @@ def test_email_connection(payload: TestConnectionInput):
         return TestConnectionResponse(success=success, message=msg)
     except Exception as e:
         err = str(e)
-        if "Authentication failed" in err or "LOGIN failed" in err or "NO" in err:
+        if "Authentication failed" in err or "LOGIN failed" in err or "NO" in err or "Failure" in err:
             err = (
-                "Authentication failed. If using Gmail, make sure you are using a 16-character "
-                "Google App Password (myaccount.google.com/apppasswords), NOT your regular account password."
+                "Zoho Mail authentication failed. Please ensure: "
+                "1) IMAP Access is enabled in Zoho Mail Settings -> Mail Accounts -> IMAP Access. "
+                "2) You are using a Zoho Application-Specific Password generated at https://accounts.zoho.in (or accounts.zoho.com) -> Security -> App Passwords."
             )
         return TestConnectionResponse(success=False, message=err)
 
@@ -110,10 +111,11 @@ async def save_email_settings(payload: EmailConfigInput):
     )
     success, msg = service.test_connection()
     if not success:
-        if "Authentication failed" in msg or "LOGIN" in msg:
+        if "Authentication failed" in msg or "LOGIN" in msg or "Failure" in msg:
             msg = (
-                "Authentication failed. If using Gmail, please create a 16-character App Password at: "
-                "https://myaccount.google.com/apppasswords and use it as your password."
+                "Zoho Mail authentication failed. Please ensure: "
+                "1) IMAP Access is enabled in Zoho Mail Settings -> Mail Accounts -> IMAP Access. "
+                "2) You are using a Zoho Application-Specific Password generated at https://accounts.zoho.in (or accounts.zoho.com) -> Security -> App Passwords."
             )
         raise HTTPException(status_code=400, detail=msg)
 
