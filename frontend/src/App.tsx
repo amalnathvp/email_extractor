@@ -16,11 +16,7 @@ import {
   X,
   ArrowLeft,
   Inbox,
-  UserCheck,
   CheckCircle2,
-  Key,
-  Check,
-  AlertCircle,
 } from 'lucide-react';
 import { Attachment, Email } from './types';
 import { api } from './api/client';
@@ -44,13 +40,6 @@ export function App() {
   // File preview modal
   const [previewFile, setPreviewFile] = useState<Attachment | null>(null);
 
-  // Zoho Password Modal
-  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState<boolean>(false);
-  const [zohoPassword, setZohoPassword] = useState<string>('');
-  const [isSavingPassword, setIsSavingPassword] = useState<boolean>(false);
-  const [passwordError, setPasswordError] = useState<string | null>(null);
-  const [isConnectedLive, setIsConnectedLive] = useState<boolean>(false);
-
   // Status toast
   const [toast, setToast] = useState<string | null>(null);
 
@@ -65,14 +54,10 @@ export function App() {
     Promise.all([
       api.getEmails({ page: 1, page_size: 100, search: search.trim() || undefined }),
       api.getFiles({ page: 1, page_size: 100, search: search.trim() || undefined, sort_by: 'date', sort_order: 'desc' }),
-      api.getEmailSettings().catch(() => null),
     ])
-      .then(([emailRes, fileRes, settingsRes]) => {
+      .then(([emailRes, fileRes]) => {
         setEmails(emailRes.items);
         setFiles(fileRes.items);
-        if (settingsRes) {
-          setIsConnectedLive(settingsRes.is_connected);
-        }
         setLoading(false);
       })
       .catch((err) => {
@@ -106,34 +91,6 @@ export function App() {
     return () => clearInterval(interval);
   }, [search]);
 
-  // Save Zoho Password
-  const handleSaveZohoPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSavingPassword(true);
-    setPasswordError(null);
-    try {
-      await api.saveEmailSettings({
-        email_host: 'imap.zoho.in',
-        email_port: 993,
-        email_username: MY_EMAIL,
-        email_password: zohoPassword.trim(),
-        email_use_ssl: true,
-        email_folder: 'INBOX',
-        auto_poll_enabled: true,
-        poll_interval_seconds: 30,
-      });
-      setIsConnectedLive(true);
-      setIsSavingPassword(false);
-      setIsPasswordModalOpen(false);
-      setZohoPassword('');
-      showToast('Connected to Zoho Mail! Background syncing is now active.');
-      loadData();
-    } catch (err: any) {
-      setIsSavingPassword(false);
-      setPasswordError(err.message || 'Failed to authenticate with Zoho Mail.');
-    }
-  };
-
   // Receive a new incoming email from an external sender (test intake)
   const handleReceiveEmail = async () => {
     setIsReceiving(true);
@@ -154,7 +111,7 @@ export function App() {
     try {
       const res = await api.triggerProcess();
       loadData();
-      showToast(res.message || 'Checked Zoho inbox for incoming emails.');
+      showToast(res.message || 'Checked inbox for incoming emails.');
     } catch (err: any) {
       showToast(`Check error: ${err.message || err}`);
     } finally {
@@ -215,24 +172,17 @@ export function App() {
   return (
     <div className="h-screen w-screen flex flex-col bg-[#f6f8fc] text-[#202124] overflow-hidden font-sans">
       
-      {/* 1. Header (Zoho Mail Theme) */}
+      {/* 1. Header (Mail Extractor) */}
       <header className="h-16 px-5 flex items-center justify-between border-b border-[#dadce0] bg-[#f6f8fc] select-none z-20 shrink-0">
-        {/* Logo & Zoho Brand */}
-        <div className="flex items-center space-x-3 w-80">
-          {/* Zoho Mail stylized 4-color emblem */}
-          <div className="flex items-center space-x-1.5">
-            <div className="w-3.5 h-3.5 rounded-sm bg-[#e42528]"></div>
-            <div className="w-3.5 h-3.5 rounded-sm bg-[#228b22]"></div>
-            <div className="w-3.5 h-3.5 rounded-sm bg-[#0066cc]"></div>
-            <div className="w-3.5 h-3.5 rounded-sm bg-[#ffbf00]"></div>
+        {/* Logo & Brand: Mail Extractor */}
+        <div className="flex items-center space-x-3 w-72">
+          <div className="p-2 bg-[#e8f0fe] rounded-xl text-[#1a73e8] shadow-sm">
+            <Mail className="w-5 h-5 text-[#1a73e8]" />
           </div>
-          <div>
-            <span className="text-[19px] font-bold text-[#1f2937] tracking-tight">Zoho Mail</span>
-            <span className="ml-2 text-[11px] bg-blue-100 text-[#0066cc] px-2 py-0.5 rounded-full font-semibold">Auto Sorter</span>
-          </div>
+          <span className="text-[20px] font-bold text-[#1f2937] tracking-tight">Mail Extractor</span>
         </div>
 
-        {/* Google / Web Search Bar */}
+        {/* Search Bar */}
         <div className="flex-1 max-w-2xl px-2">
           <div className="relative flex items-center bg-[#eaf1fb] hover:bg-[#e1eaf7] hover:shadow-sm focus-within:bg-white focus-within:shadow-md transition-all rounded-full px-4 py-2 border border-transparent">
             <Search className="w-5 h-5 text-[#5f6368] shrink-0" />
@@ -251,24 +201,15 @@ export function App() {
           </div>
         </div>
 
-        {/* Active Target Mailbox: amalnathvp@zohomail.in */}
+        {/* Navbar Right: Only Active Mailbox & Avatar */}
         <div className="flex items-center space-x-3">
           <div className="flex items-center space-x-2 bg-white border border-[#dadce0] px-3.5 py-1.5 rounded-full text-xs text-[#444746] shadow-sm">
-            <span className={`w-2.5 h-2.5 rounded-full ${isConnectedLive ? 'bg-[#1e8e3e]' : 'bg-[#1a73e8]'} animate-pulse`} />
+            <span className="w-2.5 h-2.5 rounded-full bg-[#1e8e3e] animate-pulse" />
             <span className="text-[#5f6368]">Inbox:</span>
             <span className="font-semibold text-[#1f1f1f]">{MY_EMAIL}</span>
           </div>
 
-          <button
-            onClick={() => setIsPasswordModalOpen(true)}
-            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full border border-[#dadce0] bg-white hover:bg-[#f1f3f4] text-xs font-medium text-[#444746] shadow-sm"
-            title="Configure Zoho IMAP Password"
-          >
-            <Key className="w-3.5 h-3.5 text-[#0066cc]" />
-            <span className="hidden sm:inline">IMAP Key</span>
-          </button>
-
-          <div className="w-8 h-8 rounded-full bg-[#0066cc] text-white flex items-center justify-center text-sm font-bold shadow-sm">
+          <div className="w-8 h-8 rounded-full bg-[#1a73e8] text-white flex items-center justify-center text-sm font-bold shadow-sm">
             A
           </div>
         </div>
@@ -277,8 +218,8 @@ export function App() {
       {/* Main Workspace */}
       <div className="flex-1 flex overflow-hidden">
         
-        {/* 2. Left Folder Sidebar */}
-        <aside className="w-64 p-3 flex flex-col justify-between shrink-0 bg-[#f6f8fc] select-none">
+        {/* 2. Left Folder Sidebar (Clean - bottom card removed) */}
+        <aside className="w-64 p-3 flex flex-col shrink-0 bg-[#f6f8fc] select-none">
           <div className="space-y-4">
             
             {/* Primary Action Button: Receive New Email */}
@@ -288,7 +229,7 @@ export function App() {
               className="w-full flex items-center justify-center space-x-2.5 bg-[#dbeafe] hover:bg-[#bfdbfe] text-[#1e40af] px-5 py-3.5 rounded-2xl shadow-sm hover:shadow transition-all font-semibold text-xs disabled:opacity-50"
               title="Simulates an incoming email with PDF, JPG, Video, Audio attachments to amalnathvp@zohomail.in"
             >
-              <Inbox className={`w-4 h-4 ${isReceiving ? 'animate-bounce text-[#0066cc]' : ''}`} />
+              <Inbox className={`w-4 h-4 ${isReceiving ? 'animate-bounce text-[#1a73e8]' : ''}`} />
               <span>{isReceiving ? 'Receiving & Sorting...' : 'Receive Incoming Mail'}</span>
             </button>
 
@@ -298,7 +239,7 @@ export function App() {
                 { id: 'INBOX' as const, label: 'All Received Mails', count: emails.length, icon: <Mail className="w-4 h-4" /> },
                 { id: 'PDF' as const, label: 'PDF Folder', count: pdfCount, icon: <FileText className="w-4 h-4 text-[#d93025]" /> },
                 { id: 'JPG' as const, label: 'JPG / Images', count: jpgCount, icon: <ImageIcon className="w-4 h-4 text-[#9334e6]" /> },
-                { id: 'VIDEO' as const, label: 'Video Folder', count: videoCount, icon: <Video className="w-4 h-4 text-[#0066cc]" /> },
+                { id: 'VIDEO' as const, label: 'Video Folder', count: videoCount, icon: <Video className="w-4 h-4 text-[#1a73e8]" /> },
                 { id: 'AUDIO' as const, label: 'Audio Folder', count: audioCount, icon: <Music className="w-4 h-4 text-[#1e8e3e]" /> },
                 { id: 'OTHER' as const, label: 'Other Files', count: otherCount, icon: <FolderArchive className="w-4 h-4 text-[#5f6368]" /> },
               ].map((item) => {
@@ -328,17 +269,6 @@ export function App() {
               })}
             </nav>
           </div>
-
-          {/* Clean Info Box */}
-          <div className="p-3 bg-white border border-[#e0e2e7] rounded-xl text-xs space-y-1.5 shadow-sm">
-            <div className="flex items-center space-x-1.5 text-[#0066cc] font-semibold text-[11px]">
-              <UserCheck className="w-3.5 h-3.5" />
-              <span>Zoho Mail Auto-Sorter</span>
-            </div>
-            <p className="text-[11px] text-[#5f6368] leading-tight">
-              Emails sent to <strong className="text-[#202124]">{MY_EMAIL}</strong> automatically have attachments organized into server folders.
-            </p>
-          </div>
         </aside>
 
         {/* 3. Main Workspace Container */}
@@ -357,14 +287,14 @@ export function App() {
                 </button>
               ) : (
                 <div className="flex items-center space-x-3 text-xs font-medium text-[#444746]">
-                  <input type="checkbox" className="rounded text-[#0066cc] focus:ring-0 cursor-pointer" />
+                  <input type="checkbox" className="rounded text-[#1a73e8] focus:ring-0 cursor-pointer" />
                   <button
                     onClick={handleRefresh}
                     disabled={isReceiving}
                     className="p-1.5 hover:bg-[#f1f3f4] rounded-full text-[#5f6368] hover:text-[#202124] transition-colors disabled:opacity-50"
-                    title="Check Zoho inbox for incoming emails"
+                    title="Check inbox for incoming emails"
                   >
-                    <RefreshCw className={`w-4 h-4 ${isReceiving ? 'animate-spin text-[#0066cc]' : ''}`} />
+                    <RefreshCw className={`w-4 h-4 ${isReceiving ? 'animate-spin text-[#1a73e8]' : ''}`} />
                   </button>
                   <span className="text-[#80868b]">|</span>
                   <span className="font-semibold text-[#1f1f1f]">
@@ -379,7 +309,7 @@ export function App() {
               <button
                 onClick={handleReceiveEmail}
                 disabled={isReceiving}
-                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-[#eff6ff] hover:bg-[#dbeafe] text-[#0066cc] text-xs font-semibold transition-colors border border-[#bfdbfe]"
+                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-[#eff6ff] hover:bg-[#dbeafe] text-[#1a73e8] text-xs font-semibold transition-colors border border-[#bfdbfe]"
               >
                 <Inbox className="w-3.5 h-3.5" />
                 <span>{isReceiving ? 'Receiving...' : 'Receive Incoming Mail'}</span>
@@ -409,7 +339,7 @@ export function App() {
                   <h1 className="text-xl font-medium text-[#202124] mb-3">{selectedEmail.subject || '(No Subject)'}</h1>
                   <div className="flex items-center justify-between text-xs text-[#5f6368]">
                     <div className="flex items-center space-x-2.5">
-                      <div className="w-8 h-8 rounded-full bg-[#0066cc] text-white flex items-center justify-center font-semibold text-sm">
+                      <div className="w-8 h-8 rounded-full bg-[#1a73e8] text-white flex items-center justify-center font-semibold text-sm">
                         {selectedEmail.sender[0]?.toUpperCase() || 'S'}
                       </div>
                       <div>
@@ -499,7 +429,7 @@ export function App() {
                       className="flex items-center px-4 py-3 hover:shadow-md hover:bg-[#f2f6fc] cursor-pointer transition-all text-xs group"
                     >
                       <div className="flex items-center space-x-3 mr-3 text-[#c4c7c5]" onClick={(e) => e.stopPropagation()}>
-                        <input type="checkbox" className="rounded text-[#0066cc] focus:ring-0 cursor-pointer" />
+                        <input type="checkbox" className="rounded text-[#1a73e8] focus:ring-0 cursor-pointer" />
                         <Star className="w-4 h-4 hover:text-[#f4b400] text-[#dadce0] cursor-pointer" />
                       </div>
 
@@ -566,7 +496,7 @@ export function App() {
                           {!['PDF', 'IMAGE', 'VIDEO', 'AUDIO'].includes(file.file_category) && <FolderArchive className="w-4 h-4" />}
                         </div>
                         <div className="truncate">
-                          <span className="font-semibold text-[#1f1f1f] group-hover:text-[#0066cc] transition-colors truncate block">
+                          <span className="font-semibold text-[#1f1f1f] group-hover:text-[#1a73e8] transition-colors truncate block">
                             {file.original_filename}
                           </span>
                           <span className="text-[11px] text-[#5f6368] truncate block">
@@ -614,98 +544,6 @@ export function App() {
           </div>
         </main>
       </div>
-
-      {/* 4. Zoho Mail IMAP Connection Modal */}
-      {isPasswordModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl border border-[#dadce0] w-full max-w-md p-6 space-y-4 animate-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between border-b border-[#f1f3f4] pb-3">
-              <div className="flex items-center space-x-2">
-                <Key className="w-5 h-5 text-[#0066cc]" />
-                <h2 className="text-base font-bold text-[#1f2937]">Connect Zoho Mail</h2>
-              </div>
-              <button
-                onClick={() => setIsPasswordModalOpen(false)}
-                className="p-1 hover:bg-[#f1f3f4] rounded-full text-gray-500"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <p className="text-xs text-[#4b5563] leading-relaxed">
-              To automatically download and arrange live incoming emails to <strong className="text-black">{MY_EMAIL}</strong>, enter your Zoho Mail App Password below.
-            </p>
-
-            <form onSubmit={handleSaveZohoPassword} className="space-y-4">
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-gray-700">Zoho Email Address</label>
-                <input
-                  type="text"
-                  disabled
-                  value={MY_EMAIL}
-                  className="w-full bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-xs font-medium text-gray-700"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-gray-700">Zoho IMAP Host & Port</label>
-                <input
-                  type="text"
-                  disabled
-                  value="imap.zoho.in:993 (SSL)"
-                  className="w-full bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-xs font-medium text-gray-700 font-mono"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-gray-700">Zoho App Password</label>
-                <input
-                  type="password"
-                  required
-                  placeholder="Enter your Zoho Application-Specific Password"
-                  value={zohoPassword}
-                  onChange={(e) => setZohoPassword(e.target.value)}
-                  className="w-full bg-white border border-gray-300 focus:border-[#0066cc] rounded-lg px-3 py-2 text-xs outline-none"
-                />
-                <p className="text-[11px] text-[#6b7280]">
-                  Generate at: <a href="https://accounts.zoho.in" target="_blank" rel="noreferrer" className="text-[#0066cc] underline">accounts.zoho.in</a> &gt; Security &gt; App Passwords.
-                </p>
-              </div>
-
-              {passwordError && (
-                <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 flex items-start space-x-2">
-                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                  <span>{passwordError}</span>
-                </div>
-              )}
-
-              <div className="flex items-center justify-end space-x-2 pt-2 border-t border-[#f1f3f4]">
-                <button
-                  type="button"
-                  onClick={() => setIsPasswordModalOpen(false)}
-                  className="px-4 py-2 rounded-lg text-xs font-medium text-gray-600 hover:bg-gray-100"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSavingPassword}
-                  className="px-5 py-2 rounded-lg text-xs font-semibold bg-[#0066cc] hover:bg-[#0052a3] text-white transition-colors disabled:opacity-50 flex items-center space-x-1.5"
-                >
-                  {isSavingPassword ? (
-                    <>
-                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                      <span>Verifying...</span>
-                    </>
-                  ) : (
-                    <span>Save & Connect</span>
-                  )}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* File Preview Modal */}
       {previewFile && (

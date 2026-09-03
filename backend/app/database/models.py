@@ -43,7 +43,7 @@ class Email(Base):
     body_html = Column(Text, nullable=True)  # Raw HTML body if present
     received_at = Column(DateTime(timezone=True), nullable=True, index=True)
     processed_at = Column(DateTime(timezone=True), nullable=True)
-    status = Column(SQLEnum(EmailStatus), default=EmailStatus.PENDING, nullable=False, index=True)
+    status = Column(SQLEnum(EmailStatus, native_enum=False), default=EmailStatus.PENDING, nullable=False, index=True)
     error_message = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
 
@@ -67,7 +67,7 @@ class Attachment(Base):
     original_filename = Column(String(512), nullable=False)
     stored_filename = Column(String(512), unique=True, nullable=False, index=True)
     mime_type = Column(String(128), nullable=False, index=True)
-    file_category = Column(SQLEnum(FileCategory), nullable=False, index=True)
+    file_category = Column(SQLEnum(FileCategory, native_enum=False), nullable=False, index=True)
     file_size = Column(Integer, nullable=False)  # in bytes
     storage_path = Column(String(1024), nullable=False)  # relative path within storage root
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False, index=True)

@@ -193,3 +193,59 @@ async def toggle_auto_sync(enabled: bool, interval_seconds: Optional[int] = None
         "poll_interval_seconds": scheduler.poll_interval,
         "message": msg
     }
+
+from sqlalchemy import text, create_engine
+from sqlalchemy.orm import sessionmaker
+
+class DatabaseConfigInput(BaseModel):
+    database_url: str
+
+@router.post("/database")
+def configure_supabase_database(payload: DatabaseConfigInput):
+    """
+    Tests and connects to a Supabase PostgreSQL instance, creates the required
+    schema tables (emails, attachments), and saves the connection URI to backend/.env.
+    """
+    url = payload.database_url.strip()
+    if not url:
+        raise HTTPException(status_code=400, detail="Database URL is required.")
+
+    if url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql://", 1)
+
+    try:
+        test_engine = create_engine(url, pool_pre_ping=True)
+        with test_engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+
+        # Initialize schema tables in Supabase
+        from backend.app.database.database import Base
+        Base.metadata.create_all(bind=test_engine)
+
+        # Update runtime settings
+        settings.DATABASE_URL = url
+        from backend.app.database import database as db_mod
+        db_mod.engine = test_engine
+        db_mod.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
+
+        # Persist to backend/.env
+        env_file = BACKEND_DIR / ".env"
+        if env_file.exists():
+            content = env_file.read_text(encoding="utf-8")
+            if "DATABASE_URL=" in content:
+                import re
+                content = re.sub(r"DATABASE_URL=.*", f"DATABASE_URL={url}", content)
+            else:
+                content += f"\nDATABASE_URL={url}\n"
+            env_file.write_text(content, encoding="utf-8")
+
+        return {
+            "success": True,
+            "message": "Successfully connected to Supabase! Schema tables (emails, attachments) created."
+        }
+    except Exception as e:
+        logger.error(f"Failed to connect to Supabase: {e}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to connect to Supabase: {str(e)}. Please check your credentials and host."
+        )

@@ -1,293 +1,273 @@
-# FileFlow — Email Attachment Processing & File Management System
+# Mail Extractor — Email Attachment Processing & Auto-Sorting System
 
-> A production-grade, modular Email Attachment Processing and File Management System featuring an automated IMAP receiver, robust MIME & binary classification, collision-resistant secure file storage, idempotent persistence, and a Linear/Vercel-inspired minimalist web dashboard with interactive file previews.
+> A minimalist, production-ready system that listens for incoming emails to `amalnathvp@zohomail.in`, extracts attachments, categorizes them by type into clean storage directories (`pdf/`, `jpg/`, `video/`, `audio/`, `others/`), logs records to **Supabase (PostgreSQL)**, and displays everything in a Gmail-themed web interface.
 
 ---
 
 ## Architecture Overview
 
+### High-Level System Architecture
+
 ```mermaid
-graph TD
-    A[Incoming Email / IMAP Server] -->|Fetch RFC 822 Raw Bytes| B[Email Receiver Service]
-    B --> C[Email Parser Service]
-    C -->|Extract Message-ID & Headers| D{Idempotency Check}
-    
-    D -->|Duplicate Message-ID| E[Skip Duplicate & Log]
-    D -->|New Message| F[Begin DB Transaction]
-    
-    C -->|Extract Attachments| G[Classification Engine]
-    G -->|MIME + Extension + Magic Bytes| H{Category Classifier}
-    
-    H -->|PDF| I[storage/pdf/]
-    H -->|Images| J[storage/images/]
-    H -->|Documents| K[storage/documents/]
-    H -->|Spreadsheets| L[storage/spreadsheets/]
-    H -->|Presentations| M[storage/presentations/]
-    H -->|Others| N[storage/others/]
-    
-    I & J & K & L & M & N --> O[Storage Service: Path Sanitization & Collision-Proof Naming]
-    O --> P[SQLAlchemy Models]
-    P --> Q[(Database: SQLite / PostgreSQL)]
-    F --> Q
-    
-    Q --> R[FastAPI REST API]
-    R --> S[React + TypeScript + Tailwind Minimalist Dashboard]
+flowchart TD
+    subgraph External["External Services"]
+        Sender["External Senders"] -->|Send Email| Zoho["Zoho Mail Inbox<br/>(amalnathvp@zohomail.in)"]
+        Zoho -->|IMAP SSL:993| Backend
+    end
+
+    subgraph Backend["FastAPI Backend (Port 8000)"]
+        Receiver["IMAP Receiver & Poller"]
+        Parser["MIME & Attachment Parser"]
+        Classifier["Magic Byte & Extension Classifier"]
+        StorageEngine["Secure File Storage Engine"]
+        API["FastAPI REST Endpoints"]
+        
+        Receiver --> Parser
+        Parser --> Classifier
+        Classifier --> StorageEngine
+        API <--> Receiver
+    end
+
+    subgraph Database["Database Layer"]
+        Supabase[("Supabase PostgreSQL<br/>(Connection Pooler)")]
+        Parser -->|Check Message-ID Idempotency| Supabase
+        StorageEngine -->|Save Email & Attachment Metadata| Supabase
+    end
+
+    subgraph FileStorage["Categorized File Storage"]
+        StorageEngine --> PDF["backend/storage/pdf/"]
+        StorageEngine --> JPG["backend/storage/jpg/"]
+        StorageEngine --> Video["backend/storage/video/"]
+        StorageEngine --> Audio["backend/storage/audio/"]
+        StorageEngine --> Others["backend/storage/others/"]
+    end
+
+    subgraph Frontend["React Frontend (Port 5173)"]
+        UI["Gmail-Inspired Web UI"]
+        UI <-->|Vite Proxy /api| API
+    end
 ```
 
 ---
 
-## Features
+### Attachment Processing & Auto-Sorting Pipeline
 
-- **Automated Mailbox Polling**: Connects over SSL/TLS to IMAP servers (Gmail, Outlook, custom IMAP) and retrieves unread emails with non-destructive fetching.
-- **Strict Idempotency**: Guarantees zero duplicate processing by tracking unique RFC 822 `Message-ID` values with transaction rollback safety.
-- **Multi-Layer Classification**: Validates attachments using binary magic bytes (`%PDF-`, `\x89PNG`, `PK\x03\x04`), MIME types, and file extensions.
-  - **PDF**: `storage/pdf/`
-  - **Images**: (`.png`, `.jpg`, `.jpeg`, `.webp`, `.svg`, `.gif`, `.bmp`) -> `storage/images/`
-  - **Documents**: (`.docx`, `.doc`, `.txt`, `.rtf`, `.md`) -> `storage/documents/`
-  - **Spreadsheets**: (`.xlsx`, `.xls`, `.csv`, `.tsv`) -> `storage/spreadsheets/`
-  - **Presentations**: (`.pptx`, `.ppt`) -> `storage/presentations/`
-  - **Others**: Unknown and generic binary files -> `storage/others/`
-- **Security by Design**: Complete path traversal protection (`../` prevention), filename sanitization, file size limits, and sandboxed storage paths.
-- **Collision-Resistant Naming**: `filename_YYYYMMDD_HHMMSS_uuid8.ext` avoids file-clobbering while preserving the original name in metadata.
-- **Interactive File Previews**:
-  - **PDF**: Embedded PDF viewer directly in the browser.
-  - **Images**: Responsive image viewer with fit/zoom.
-  - **Text / CSV**: Raw text viewer with monospace typography.
-  - **Unsupported Types**: Clean informational card with one-click download.
-- **Full Email Inspector**: View sender, recipient, received date, status, body (plain text & HTML), and direct links to attachments.
-- **Live Interview Demonstration Engine**:
-  - Built-in **"Simulate Email"** button in UI (`POST /api/process/simulate`).
-  - Standalone CLI demo script: `python backend/scripts/simulate_email.py`.
-  - Ingests realistic sample emails with real PDF, PNG, DOCX, and CSV attachments instantly without requiring live credentials!
+```mermaid
+sequenceDiagram
+    autonumber
+    actor External as Sender
+    participant Zoho as Zoho Mail (IMAP)
+    participant Worker as Mail Extractor Service
+    participant Supabase as Supabase (PostgreSQL)
+    participant Disk as Local Storage
+    participant UI as Web Dashboard
+
+    External->>Zoho: Send email with attachments
+    Worker->>Zoho: Poll unread emails (`UNSEEN`)
+    Zoho-->>Worker: Return RFC 822 raw message bytes
+    
+    Worker->>Worker: Parse headers, body, Message-ID
+    Worker->>Supabase: Query `emails` for existing `message_id`
+    
+    alt Email already processed (Duplicate)
+        Worker-->>Zoho: Skip & Mark seen
+    else New Email
+        Worker->>Disk: Store file by category:
+        Note over Worker,Disk: PDF -> storage/pdf/<br/>JPG/PNG -> storage/jpg/<br/>MP4/MOV -> storage/video/<br/>MP3/WAV -> storage/audio/<br/>Others -> storage/others/
+        Worker->>Supabase: Insert `emails` record
+        Worker->>Supabase: Insert `attachments` records with category & file path
+        Worker-->>Zoho: Mark message as read
+    end
+
+    UI->>Worker: GET /api/emails & GET /api/files
+    Worker->>Supabase: Fetch records
+    Supabase-->>UI: Return sorted emails & attachments
+```
 
 ---
 
-## Technology Stack
+## Core Features
 
-### Backend
-- **Python 3.12+**
-- **FastAPI**: High-performance asynchronous REST API.
-- **SQLAlchemy 2.0**: PostgreSQL-ready ORM with SQLite WAL mode default.
-- **Pydantic v2**: Strict schema validation and settings management.
-- **IMAPClient**: Robust IMAP protocol client.
-- **Pathlib & Standard Library `email`**: Safe file paths & MIME parsing.
+- **Dedicated Inbox Receiver**: Listens to `amalnathvp@zohomail.in` via secure Zoho IMAP (`imap.zoho.in:993`, SSL enabled).
+- **Automated Multi-Layer Sorting**:
+  - **`PDF`** (`storage/pdf/`) — Documents validated with `%PDF-` magic bytes and `.pdf` extension.
+  - **`JPG / Images`** (`storage/jpg/`) — Photos & graphics (`.jpg`, `.jpeg`, `.png`, `.webp`, `.gif`).
+  - **`Video`** (`storage/video/`) — Media clips (`.mp4`, `.mov`, `.avi`, `.mkv`, `.webm`).
+  - **`Audio`** (`storage/audio/`) — Voice notes & audio (`.mp3`, `.wav`, `.aac`, `.ogg`, `.m4a`).
+  - **`Others`** (`storage/others/`) — Remaining non-media attachments.
+- **Supabase PostgreSQL Persistence**: All email metadata, status, timestamps, and attachment details are stored in Supabase with automatic connection pooling (`pool_pre_ping=True`, `pool_recycle=300`).
+- **Strict Idempotency**: Guarantees zero duplicate downloads by validating RFC 822 `Message-ID` in Supabase before processing.
+- **Collision-Resistant Storage**: Stored as `filename_YYYYMMDD_HHMMSS_uuid8.ext` while preserving original user filenames in metadata.
+- **Gmail-Inspired Frontend**:
+  - Folder views for `All Received Mails`, `PDF`, `JPG / Images`, `Video`, `Audio`, and `Other`.
+  - Reading pane with full body view and attachment pill cards.
+  - Instant live search across email subjects, sender names, and filenames.
+  - In-browser file preview (PDF reader, image zoom, audio player, video player) and one-click downloads.
+  - One-click **"Receive Incoming Mail"** intake simulation button.
 
-### Frontend
-- **React 18** + **TypeScript**
-- **Tailwind CSS**: Sleek dark/neutral theme (Linear / Vercel aesthetic).
-- **Vite 5**: Fast development and production bundler.
-- **Lucide Icons**: Professional minimalist iconography.
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| **Backend** | Python 3.12+, FastAPI, Uvicorn |
+| **Database** | Supabase (PostgreSQL), SQLAlchemy 2.0, Psycopg2 |
+| **Mail Client** | Python `imaplib`, `email.message`, MIME Parser |
+| **Frontend** | React 18, TypeScript, Vite 5, Tailwind CSS, Lucide Icons |
+| **Testing** | Pytest, FastAPI TestClient, Pytest-Asyncio |
 
 ---
 
 ## Project Structure
 
 ```text
-email-file-manager/
+Email/
 ├── backend/
 │   ├── app/
-│   │   ├── main.py                     # FastAPI application factory
 │   │   ├── api/
-│   │   │   ├── emails.py               # Email listing & detail routes
-│   │   │   ├── files.py                # File browser, download, preview routes
-│   │   │   ├── dashboard.py            # Stats, storage metrics, live logs
-│   │   │   └── process.py              # Sync trigger, scheduler, simulation
+│   │   │   ├── dashboard.py       # Metrics, stats, and logs
+│   │   │   ├── emails.py          # Email listing and detail routes
+│   │   │   ├── files.py           # Categorized file download & preview routes
+│   │   │   ├── process.py         # Sync trigger and email simulation
+│   │   │   └── settings.py        # Mailbox & database configurations
 │   │   ├── core/
-│   │   │   ├── config.py               # Pydantic Settings & environment
-│   │   │   └── logging.py              # Structured logging (console + file)
+│   │   │   ├── config.py          # Pydantic configuration & environment
+│   │   │   └── logging.py         # Structured application logger
 │   │   ├── database/
-│   │   │   ├── database.py             # Engine, sessionmaker, SQLite WAL
-│   │   │   └── models.py               # Email & Attachment ORM models
-│   │   ├── schemas/
-│   │   │   ├── email.py                # Email schemas
-│   │   │   ├── attachment.py           # Attachment schemas
-│   │   │   └── dashboard.py            # Stats & result schemas
-│   │   └── services/
-│   │       ├── email_service.py        # IMAP connection & message fetch
-│   │       ├── parser_service.py       # RFC 822 MIME parser & header decoder
-│   │       ├── classification_service.py # Multi-layer MIME & magic byte classifier
-│   │       ├── storage_service.py      # Path sanitization & safe storage
-│   │       ├── processing_service.py   # Idempotent orchestrator
-│   │       └── scheduler_service.py    # Background polling task runner
-│   ├── storage/                        # Categorized attachment directories
+│   │   │   ├── database.py        # Supabase PostgreSQL engine & sessionmaker
+│   │   │   └── models.py          # SQLAlchemy models (emails, attachments)
+│   │   ├── schemas/               # Pydantic request & response schemas
+│   │   ├── services/
+│   │   │   ├── classification.py  # Binary magic-bytes & MIME classification
+│   │   │   ├── email_service.py   # Zoho IMAP connection & email parser
+│   │   │   ├── processing_service.py # Orchestrator & idempotent pipeline
+│   │   │   ├── scheduler_service.py  # Automated background inbox poller
+│   │   │   └── storage_service.py    # Collision-proof file persistence
+│   │   └── main.py                # FastAPI application entrypoint
+│   ├── storage/                   # Organized attachment destination folders
 │   │   ├── pdf/
-│   │   ├── images/
-│   │   ├── documents/
-│   │   ├── spreadsheets/
-│   │   ├── presentations/
+│   │   ├── jpg/
+│   │   ├── video/
+│   │   ├── audio/
 │   │   └── others/
-│   ├── logs/                           # Runtime log files (app.log)
-│   ├── tests/                          # 22 comprehensive Pytest unit tests
-│   ├── scripts/
-│   │   └── simulate_email.py           # Standalone CLI demo script
-│   ├── requirements.txt
-│   └── .env.example
+│   ├── tests/                     # 25 automated unit tests
+│   ├── .env                       # Environment variables (Zoho & Supabase)
+│   └── requirements.txt
 ├── frontend/
 │   ├── src/
-│   │   ├── api/client.ts               # Typed REST API client
+│   │   ├── api/
+│   │   │   └── client.ts          # Typed REST API client
 │   │   ├── components/
-│   │   │   ├── layout/                 # Sidebar, Header
-│   │   │   ├── files/                  # FilePreviewModal
-│   │   │   └── emails/                 # EmailDetailDrawer
-│   │   ├── pages/
-│   │   │   ├── OverviewPage.tsx        # Dashboard overview & stats
-│   │   │   ├── FilesPage.tsx           # Full file browser (search, filter, sort)
-│   │   │   ├── EmailsPage.tsx          # Email history & reader
-│   │   │   └── SettingsPage.tsx        # IMAP status, worker controls, logs
-│   │   ├── types/index.ts              # TypeScript interfaces
-│   │   ├── App.tsx                     # Main application shell
-│   │   └── index.css                   # Minimalist design system
-│   ├── package.json
-│   ├── tailwind.config.js
-│   └── vite.config.ts
-├── docs/
-│   └── ARCHITECTURE_ASSESSMENT.md      # Detailed 16-point technical document
-├── Dockerfile
-├── docker-compose.yml
+│   │   │   └── files/
+│   │   │       └── FilePreviewModal.tsx # PDF, Image, Video, Audio preview modal
+│   │   ├── types/                 # TypeScript interfaces
+│   │   ├── App.tsx                # Main Gmail-themed application UI
+│   │   └── main.tsx               # React DOM root
+│   ├── vite.config.ts             # Vite server with /api proxy to port 8000
+│   └── package.json
 └── README.md
 ```
 
 ---
 
-## Quickstart Guide
+## Quick Start
 
-### 1. Backend Setup
-
-1. **Navigate to backend and create virtual environment**:
-   ```bash
-   cd backend
-   python -m venv venv
-   # On Windows:
-   .\venv\Scripts\activate
-   # On Linux/macOS:
-   source venv/bin/activate
-   ```
-
-2. **Install dependencies**:
-   ```bash
-   python -m pip install -r requirements.txt
-   ```
-
-3. **Configure environment**:
-   ```bash
-   cp .env.example .env
-   ```
-   *(By default, `.env` uses local SQLite and is immediately ready for simulation and testing. To connect to live Gmail, set `EMAIL_USERNAME` and your 16-character Google App Password in `EMAIL_PASSWORD`)*.
-
-4. **Run the backend server**:
-   ```bash
-   uvicorn backend.app.main:app --reload --port 8000
-   ```
-   - API Documentation (Swagger UI): `http://localhost:8000/docs`
-   - Health Check: `http://localhost:8000/health`
+### 1. Prerequisites
+- Python 3.11+
+- Node.js 18+ and npm
+- A [Supabase](https://supabase.com) project
 
 ---
 
-### 2. Frontend Setup
+### 2. Environment Configuration
 
-1. **Navigate to frontend**:
-   ```bash
-   cd frontend
+Create or verify `backend/.env`:
+
+```env
+# Mail Configuration (Zoho Mail)
+EMAIL_HOST=imap.zoho.in
+EMAIL_PORT=993
+EMAIL_USERNAME=amalnathvp@zohomail.in
+EMAIL_PASSWORD=your_zoho_app_password
+EMAIL_USE_SSL=true
+EMAIL_FOLDER=INBOX
+EMAIL_SEARCH_CRITERIA=UNSEEN
+MARK_SEEN_ON_PROCESS=true
+
+# Supabase PostgreSQL Database (IPv4 Pooler URI)
+DATABASE_URL=postgresql://postgres.[PROJECT_REF]:[PASSWORD]@aws-0-[REGION].pooler.supabase.com:5432/postgres?sslmode=require
+SUPABASE_URL=https://[PROJECT_REF].supabase.co
+
+# Storage & Auto-Poll
+STORAGE_PATH=storage
+AUTO_POLL_ENABLED=true
+POLL_INTERVAL_SECONDS=30
+```
+
+---
+
+### 3. Backend Setup & Run
+
+1. Open a terminal in the project root:
+   ```powershell
+   # Install dependencies
+   pip install -r backend/requirements.txt
+   
+   # Start FastAPI server on port 8000
+   python -m uvicorn backend.app.main:app --reload --port 8000
    ```
+2. The API will be available at:
+   - **API Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
+   - **Health Check**: [http://localhost:8000/health](http://localhost:8000/health)
 
-2. **Install dependencies and start development server**:
-   ```bash
+---
+
+### 4. Frontend Setup & Run
+
+1. Open a second terminal and navigate to the `frontend` folder:
+   ```powershell
+   cd frontend
    npm install
    npm run dev
    ```
-   - Dashboard will open at `http://localhost:5173`.
+2. Open your browser at:
+   - **Web App**: [http://localhost:5173](http://localhost:5173)
 
 ---
 
-## Technical Interview Demonstration Workflow
+## Running the Automated Test Suite
 
-To demonstrate the full end-to-end workflow in an interview:
+The test suite covers classification, binary magic-byte detection, idempotency, MIME header decoding, path-traversal security, and REST API endpoints:
 
+```powershell
+python -m pytest backend/tests -v
+```
+
+Output:
 ```text
-1. Start the application
-          ↓
-2. Open browser: http://localhost:5173
-          ↓
-3. Show clean dashboard overview (Linear/Vercel minimalist theme)
-          ↓
-4. Click "Simulate Email (Demo)" in sidebar or header
-   (or run in terminal: python backend/scripts/simulate_email.py)
-          ↓
-5. Live Toast Notification appears:
-   "Simulated email received and processed with 4 attachments!"
-          ↓
-6. Dashboard statistics immediately update:
-   - Total Emails: +1
-   - Total Files: +4
-   - PDF: +1
-   - Image: +1
-   - Document: +1
-   - Spreadsheet: +1
-          ↓
-7. Navigate to "All Files" or click category:
-   - invoice.pdf appears under "PDFs"
-   - photo.png appears under "Images"
-   - report.docx appears under "Documents"
-   - sales_data.csv appears under "Spreadsheets"
-          ↓
-8. Click any file to open interactive Preview:
-   - PDF displays in embedded browser viewer
-   - Image displays responsive preview
-   - CSV displays monospace raw data
-   - DOCX displays clean fallback card with Download button
-          ↓
-9. Click "Emails" in sidebar:
-   - Click the received email to open the Email Detail Drawer
-   - Inspect From, To, Subject, Received timestamp, and message body
-   - Click any attachment chip to preview it directly
-          ↓
-10. Navigate to "Settings & Status":
-   - Inspect live application logs showing structured audit trail:
-     [INFO] Email parsed -> [INFO] Attachment classified -> [INFO] File stored safely
+======================== 25 passed in 4.94s ========================
 ```
 
 ---
 
-## Testing
+## REST API Reference
 
-Run the full pytest suite (22 unit & integration tests):
-```bash
-python -m pytest backend/tests/ -v
-```
-
-### Covered Test Areas:
-- **Email Parsing**: Multipart bodies, boundary parsing, charset decoding.
-- **RFC 2047 Decoding**: UTF-8 base64 encoded subjects (`=?UTF-8?B?...=`).
-- **Attachment Extraction**: Decodes binary payload from MIME parts.
-- **Classification Engine**: Validates PDF, PNG, JPEG, CSV, XLSX, DOCX, PPTX, and unknown scripts.
-- **Security & Path Traversal**: Verifies path sanitization, stripping `../../`, and sandboxing in `STORAGE_PATH`.
-- **Idempotency**: Submitting duplicate `Message-ID` verifies duplicate detection and zero double-processing.
-- **REST APIs**: Tests `/health`, `/api/stats`, `/api/files`, `/api/emails`, `/api/process/simulate`, preview streaming, and download headers.
-
----
-
-## Security Practices
-
-1. **Directory Traversal Protection**: Uses regex character whitelisting and `pathlib.Path.resolve()` to ensure target paths never escape `storage/`.
-2. **Deterministic Deduplication**: Prevents repeated ingestion of the same email even during concurrent polling runs.
-3. **No Raw Filesystem Parameters**: API endpoints identify attachments solely via internal integer primary keys.
-4. **Credential Isolation**: Credentials reside exclusively in environment variables and are never emitted in logs.
-5. **Transactional Integrity**: Database rolls back and deletes orphaned files if an error occurs mid-process.
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/health` | Service health and storage status |
+| `GET` | `/api/emails` | Paginated list of incoming emails (with attachment counts) |
+| `GET` | `/api/emails/{id}` | Full email body (plain text & HTML) and attachment list |
+| `GET` | `/api/files` | Categorized files filterable by `category` (PDF, IMAGE, VIDEO, AUDIO, OTHER) |
+| `GET` | `/api/files/{id}/download` | Stream and download an attachment file |
+| `GET` | `/api/files/{id}/preview` | In-browser preview streaming |
+| `DELETE` | `/api/files/{id}` | Delete an attachment from database and disk |
+| `POST` | `/api/process/sync` | Trigger an immediate inbox poll for unread emails |
+| `POST` | `/api/process/simulate` | Ingest a simulated incoming email with test attachments |
+| `GET` | `/api/stats` | Mailbox summary metrics and category counts |
 
 ---
 
-## Docker Deployment
+## License
 
-To launch the full system with Docker Compose:
-```bash
-docker-compose up --build
-```
-- Backend will be available at `http://localhost:8000`
-- Frontend will be available at `http://localhost:5173`
-
----
-
-## Documentation
-
-For an in-depth technical analysis covering all 16 interview assessment topics (architecture, processing flow, classification, scalability to S3/Postgres/Kafka, error handling, security, and future enhancements), refer to:
-- [`docs/ARCHITECTURE_ASSESSMENT.md`](file:///c:/Users/amaln/OneDrive/Desktop/JOB/Email/docs/ARCHITECTURE_ASSESSMENT.md)
+MIT License. Designed for automated email intake and file management.

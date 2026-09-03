@@ -4,6 +4,7 @@ from typing import Optional
 from backend.app.core.config import settings
 from backend.app.core.logging import logger
 from backend.app.database.database import SessionLocal
+from backend.app.schemas.dashboard import ProcessResult
 from backend.app.services.processing_service import ProcessingService
 
 class SchedulerService:
@@ -52,19 +53,32 @@ class SchedulerService:
 
     def _run_sync_process(self):
         """Worker function executed in thread pool."""
-        db = SessionLocal()
+        if SessionLocal is None:
+            return ProcessResult(
+                success=False,
+                message="Supabase DATABASE_URL not configured. Waiting for connection string..."
+            )
+        db = None
         try:
+            db = SessionLocal()
             processor = ProcessingService(db=db)
             return processor.process_inbox()
+        except Exception as e:
+            logger.warning(f"Polling paused: {e}")
+            return ProcessResult(
+                success=False,
+                message=f"Awaiting valid Supabase connection: {e}"
+            )
         finally:
-            db.close()
+            if db is not None:
+                db.close()
 
     def start(self, interval_seconds: Optional[int] = None):
         """Starts background polling task."""
-        if self.is_running:
-            return
         if interval_seconds:
             self.poll_interval = interval_seconds
+        if self.is_running:
+            return
 
         self.is_running = True
         try:

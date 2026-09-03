@@ -32,8 +32,10 @@ class Settings(BaseSettings):
     EMAIL_SEARCH_CRITERIA: str = "UNSEEN"  # or 'ALL'
     MARK_SEEN_ON_PROCESS: bool = True
 
-    # Database Configuration (PostgreSQL-ready, SQLite default)
-    DATABASE_URL: str = f"sqlite:///{BACKEND_DIR / 'storage' / 'email_manager.db'}"
+    # Database Configuration (Supabase PostgreSQL Pooler)
+    DATABASE_URL: str = "postgresql://postgres.kaasbhpibxzvqhdrdbst:mailmanageramal31@aws-0-ap-southeast-2.pooler.supabase.com:5432/postgres?sslmode=require"
+    SUPABASE_URL: str = "https://kaasbhpibxzvqhdrdbst.supabase.co"
+    SUPABASE_KEY: str = ""
 
     # File Storage Configuration
     STORAGE_PATH: Path = DEFAULT_STORAGE_DIR

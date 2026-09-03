@@ -1,40 +1,42 @@
-from pathlib import Path
-from sqlalchemy import create_engine, event
+import os
+from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
 from typing import Generator
 from backend.app.core.config import settings
 
-# Configure engine
-connect_args = {}
-if settings.DATABASE_URL.startswith("sqlite"):
-    connect_args = {"check_same_thread": False}
-    # Ensure parent directory of sqlite file exists
-    if settings.DATABASE_URL.startswith("sqlite:///"):
-        db_file = settings.DATABASE_URL.replace("sqlite:///", "")
-        if db_file and db_file != ":memory:":
-            Path(db_file).resolve().parent.mkdir(parents=True, exist_ok=True)
+def get_database_url() -> str:
+    url = settings.DATABASE_URL or os.environ.get("DATABASE_URL", "")
+    # SQLAlchemy requires postgresql:// instead of postgres://
+    if url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql://", 1)
+    return url
 
-engine = create_engine(
-    settings.DATABASE_URL,
-    connect_args=connect_args,
-    echo=settings.DEBUG
-)
+db_url = get_database_url()
 
-# Enable WAL (Write-Ahead Logging) and foreign keys for SQLite
-if settings.DATABASE_URL.startswith("sqlite"):
-    @event.listens_for(engine, "connect")
-    def set_sqlite_pragma(dbapi_connection, connection_record):
-        cursor = dbapi_connection.cursor()
-        cursor.execute("PRAGMA journal_mode=WAL")
-        cursor.execute("PRAGMA foreign_keys=ON")
-        cursor.close()
+engine_kwargs = {
+    "echo": settings.DEBUG,
+}
 
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+if db_url.startswith("postgresql"):
+    engine_kwargs.update({
+        "pool_pre_ping": True,
+        "pool_recycle": 300,
+        "pool_size": 10,
+        "max_overflow": 20,
+    })
 
+# If DATABASE_URL is not yet provided, engine is None until configured
+engine = create_engine(db_url, **engine_kwargs) if db_url else None
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine) if engine else None
 Base = declarative_base()
 
 def get_db() -> Generator[Session, None, None]:
-    """FastAPI Dependency for database session management."""
+    """FastAPI Dependency for Supabase database session management."""
+    if SessionLocal is None:
+        raise RuntimeError(
+            "Supabase database connection not configured. "
+            "Please set DATABASE_URL in backend/.env with your Supabase PostgreSQL connection URI."
+        )
     db = SessionLocal()
     try:
         yield db

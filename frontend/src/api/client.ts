@@ -137,4 +137,9 @@ export const api = {
       method: 'POST',
     });
   },
+  configureDatabase: (databaseUrl: string) =>
+    fetchApi<{ success: boolean; message: string }>('/settings/database', {
+      method: 'POST',
+      body: JSON.stringify({ database_url: databaseUrl }),
+    }),
 };

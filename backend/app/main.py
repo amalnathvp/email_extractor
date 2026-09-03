@@ -15,12 +15,18 @@ from backend.app.services.scheduler_service import scheduler
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: Ensure DB tables exist
-    logger.info("Initializing database tables...")
-    Base.metadata.create_all(bind=engine)
-    logger.info("Database schema initialized successfully.")
+    # Startup: Ensure DB tables exist in Supabase
+    if engine is not None:
+        try:
+            logger.info("Initializing Supabase database tables...")
+            Base.metadata.create_all(bind=engine)
+            logger.info("Supabase database schema initialized successfully.")
+        except Exception as e:
+            logger.warning(f"Supabase connection notice: {e}. Tables will initialize upon valid connection.")
+    else:
+        logger.warning("DATABASE_URL is not configured yet. Please configure Supabase in backend/.env.")
 
-    if settings.AUTO_POLL_ENABLED:
+    if settings.AUTO_POLL_ENABLED and engine is not None:
         logger.info(f"Auto-poll enabled. Starting background poller (interval: {settings.POLL_INTERVAL_SECONDS}s)")
         scheduler.start()
 

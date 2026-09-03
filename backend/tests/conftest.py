@@ -24,7 +24,7 @@ def test_storage_dir():
     original_storage = settings.STORAGE_PATH
     settings.STORAGE_PATH = temp_dir
 
-    for category in ["pdf", "images", "documents", "spreadsheets", "presentations", "others"]:
+    for category in ["pdf", "jpg", "video", "audio", "others"]:
         (temp_dir / category).mkdir(parents=True, exist_ok=True)
 
     yield temp_dir
