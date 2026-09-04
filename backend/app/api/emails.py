@@ -95,10 +95,12 @@ def list_emails(
 @router.delete("/batch-delete")
 @router.delete("/batch")
 def batch_delete_emails(payload: BatchDeleteEmailsRequest, db: Session = Depends(get_db)):
-    """Deletes multiple emails and their attachments in a single query."""
+    """Deletes multiple emails and their attachments directly in a single SQL query."""
     if not payload.email_ids:
         return {"deleted": 0}
 
+    # Delete child attachments in bulk directly without loading large binary blobs
+    db.query(Attachment).filter(Attachment.email_id.in_(payload.email_ids)).delete(synchronize_session=False)
     deleted_count = (
         db.query(Email)
         .filter(Email.id.in_(payload.email_ids))
@@ -133,12 +135,13 @@ def get_email_details(email_id: int, db: Session = Depends(get_db)):
 @router.delete("/{email_id}", status_code=status.HTTP_204_NO_CONTENT)
 @router.post("/{email_id}/delete", status_code=status.HTTP_200_OK)
 def delete_single_email(email_id: int, db: Session = Depends(get_db)):
-    """Deletes a single email and all its attachments."""
-    email_record = db.query(Email).filter(Email.id == email_id).first()
-    if not email_record:
+    """Fast-deletes a single email and all its attachments without loading binary data."""
+    # Delete child attachments directly via SQL without fetching blob data
+    db.query(Attachment).filter(Attachment.email_id == email_id).delete(synchronize_session=False)
+    deleted_count = db.query(Email).filter(Email.id == email_id).delete(synchronize_session=False)
+    if not deleted_count:
         raise HTTPException(status_code=404, detail="Email record not found")
 
-    db.delete(email_record)
     db.commit()
     logger.info(f"Deleted email {email_id}")
     return {"deleted": True, "id": email_id}

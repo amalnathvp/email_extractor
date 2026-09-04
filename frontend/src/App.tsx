@@ -22,7 +22,7 @@ import { api } from './api/client';
 import { FilePreviewModal } from './components/files/FilePreviewModal';
 import { FileGalleryCard } from './components/files/FileGalleryCard';
 
-const MY_EMAIL = 'amalnathvp@zohomail.in';
+const MY_EMAIL = ((import.meta as any).env?.VITE_EMAIL_ADDRESS as string) || 'amalnathvp@zohomail.in';
 
 type ViewFolder = 'INBOX' | 'PDF' | 'JPG' | 'VIDEO' | 'AUDIO' | 'OTHER';
 
@@ -32,7 +32,7 @@ export function App() {
   const [emails, setEmails] = useState<Email[]>([]);
   const [files, setFiles] = useState<Attachment[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
-  const [isReceiving, setIsReceiving] = useState<boolean>(false);
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
 
   // Multi-select for emails
   const [selectedEmailIds, setSelectedEmailIds] = useState<number[]>([]);
@@ -111,54 +111,65 @@ export function App() {
 
   const handleDeleteSelectedEmails = async () => {
     if (selectedEmailIds.length === 0) return;
-    if (!window.confirm(`Are you sure you want to delete ${selectedEmailIds.length} selected email${selectedEmailIds.length > 1 ? 's' : ''}?`)) return;
+    const idsToDelete = [...selectedEmailIds];
+    const count = idsToDelete.length;
+
+    // Snapshot for rollback if network fails
+    const prevEmails = emails;
+    const prevFiles = files;
+    const prevSelectedIds = selectedEmailIds;
+    const prevSelectedEmail = selectedEmail;
+
+    // Instant optimistic update (0ms delay)
+    setEmails((prev) => prev.filter((e) => !idsToDelete.includes(e.id)));
+    setFiles((prev) => prev.filter((f) => !idsToDelete.includes(f.email_id || 0)));
+    setSelectedEmailIds([]);
+    if (selectedEmail && idsToDelete.includes(selectedEmail.id)) {
+      setSelectedEmail(null);
+    }
+    showToast(`Deleted ${count} email${count > 1 ? 's' : ''}.`);
 
     try {
-      await api.batchDeleteEmails(selectedEmailIds);
-      const count = selectedEmailIds.length;
-      setSelectedEmailIds([]);
-      if (selectedEmail && selectedEmailIds.includes(selectedEmail.id)) {
-        setSelectedEmail(null);
-      }
-      loadData(false);
-      showToast(`Deleted ${count} email(s) from Supabase.`);
+      await api.batchDeleteEmails(idsToDelete);
     } catch (err: any) {
+      setEmails(prevEmails);
+      setFiles(prevFiles);
+      setSelectedEmailIds(prevSelectedIds);
+      setSelectedEmail(prevSelectedEmail);
       showToast(`Delete failed: ${err.message || err}`);
     }
   };
 
-  const handleDeleteSingleEmail = async (id: number, subject?: string) => {
-    if (!window.confirm(`Delete email "${subject || '(No Subject)'}"?`)) return;
+  const handleDeleteSingleEmail = async (id: number) => {
+    // Snapshot for rollback if network fails
+    const prevEmails = emails;
+    const prevFiles = files;
+    const prevSelectedIds = selectedEmailIds;
+    const prevSelectedEmail = selectedEmail;
+
+    // Instant optimistic update (0ms delay)
+    setEmails((prev) => prev.filter((e) => e.id !== id));
+    setFiles((prev) => prev.filter((f) => f.email_id !== id));
+    setSelectedEmailIds((prev) => prev.filter((item) => item !== id));
+    if (selectedEmail && selectedEmail.id === id) {
+      setSelectedEmail(null);
+    }
+    showToast('Email deleted.');
+
     try {
       await api.deleteEmail(id);
-      setSelectedEmailIds((prev) => prev.filter((item) => item !== id));
-      if (selectedEmail && selectedEmail.id === id) {
-        setSelectedEmail(null);
-      }
-      loadData(false);
-      showToast('Email deleted from Supabase.');
     } catch (err: any) {
+      setEmails(prevEmails);
+      setFiles(prevFiles);
+      setSelectedEmailIds(prevSelectedIds);
+      setSelectedEmail(prevSelectedEmail);
       showToast(`Delete failed: ${err.message || err}`);
-    }
-  };
-
-  // Receive a new incoming email from an external sender (test intake)
-  const handleReceiveEmail = async () => {
-    setIsReceiving(true);
-    try {
-      const res = await api.simulateEmail('standard');
-      loadData(false);
-      showToast(res.message || `Received incoming email to ${MY_EMAIL} and arranged all attachments!`);
-    } catch (err: any) {
-      showToast(`Intake error: ${err.message || err}`);
-    } finally {
-      setIsReceiving(false);
     }
   };
 
   // Refresh inbox
   const handleRefresh = async () => {
-    setIsReceiving(true);
+    setIsSyncing(true);
     try {
       const res = await api.triggerProcess();
       loadData(false);
@@ -166,17 +177,30 @@ export function App() {
     } catch (err: any) {
       showToast(`Check error: ${err.message || err}`);
     } finally {
-      setIsReceiving(false);
+      setIsSyncing(false);
     }
   };
 
   const handleDeleteFile = async (id: number) => {
-    if (!window.confirm('Delete this file from storage?')) return;
+    const prevFiles = files;
+    const prevEmails = emails;
+
+    // Instant optimistic update (0ms delay)
+    setFiles((prev) => prev.filter((f) => f.id !== id));
+    setEmails((prev) =>
+      prev.map((e) => ({
+        ...e,
+        attachments: e.attachments?.filter((a) => a.id !== id),
+        attachment_count: Math.max(0, (e.attachment_count || 1) - (e.attachments?.some((a) => a.id === id) ? 1 : 0)),
+      }))
+    );
+    showToast('File deleted.');
+
     try {
       await api.deleteFile(id);
-      loadData(false);
-      showToast('File deleted from Supabase.');
     } catch (err: any) {
+      setFiles(prevFiles);
+      setEmails(prevEmails);
       showToast(`Delete failed: ${err.message}`);
     }
   };
@@ -273,17 +297,6 @@ export function App() {
         <aside className="w-64 p-3 flex flex-col shrink-0 bg-[#f6f8fc] select-none">
           <div className="space-y-4">
             
-            {/* Primary Action Button: Receive New Email */}
-            <button
-              onClick={handleReceiveEmail}
-              disabled={isReceiving}
-              className="w-full flex items-center justify-center space-x-2.5 bg-[#dbeafe] hover:bg-[#bfdbfe] text-[#1e40af] px-5 py-3.5 rounded-2xl shadow-sm hover:shadow transition-all font-semibold text-xs disabled:opacity-50"
-              title="Simulates an incoming email with PDF, JPG, Video, Audio attachments to amalnathvp@zohomail.in"
-            >
-              <Inbox className={`w-4 h-4 ${isReceiving ? 'animate-bounce text-[#1a73e8]' : ''}`} />
-              <span>{isReceiving ? 'Receiving & Sorting...' : 'Receive Incoming Mail'}</span>
-            </button>
-
             {/* Folders List */}
             <nav className="space-y-1">
               {[
@@ -339,7 +352,7 @@ export function App() {
                   </button>
                   <span className="text-[#80868b]">|</span>
                   <button
-                    onClick={() => handleDeleteSingleEmail(selectedEmail.id, selectedEmail.subject)}
+                    onClick={() => handleDeleteSingleEmail(selectedEmail.id)}
                     className="inline-flex items-center space-x-1 px-2.5 py-1 rounded hover:bg-red-50 text-gray-600 hover:text-red-600 font-medium text-xs transition-colors"
                     title="Delete this email"
                   >
@@ -366,11 +379,11 @@ export function App() {
 
                   <button
                     onClick={handleRefresh}
-                    disabled={isReceiving}
+                    disabled={isSyncing}
                     className="p-1.5 hover:bg-[#f1f3f4] rounded-full text-[#5f6368] hover:text-[#202124] transition-colors disabled:opacity-50"
                     title="Check inbox for incoming emails"
                   >
-                    <RefreshCw className={`w-4 h-4 ${isReceiving ? 'animate-spin text-[#1a73e8]' : ''}`} />
+                    <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin text-[#1a73e8]' : ''}`} />
                   </button>
 
                   {selectedEmailIds.length > 0 ? (
@@ -399,17 +412,6 @@ export function App() {
               )}
             </div>
 
-            {/* Quick Receive Button in Top Right */}
-            {!selectedEmail && (
-              <button
-                onClick={handleReceiveEmail}
-                disabled={isReceiving}
-                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-[#eff6ff] hover:bg-[#dbeafe] text-[#1a73e8] text-xs font-semibold transition-colors border border-[#bfdbfe]"
-              >
-                <Inbox className="w-3.5 h-3.5" />
-                <span>{isReceiving ? 'Receiving...' : 'Receive Incoming Mail'}</span>
-              </button>
-            )}
           </div>
 
           {/* Toast Notification */}
@@ -516,7 +518,7 @@ export function App() {
                 <div className="p-16 text-center space-y-2">
                   <Mail className="w-10 h-10 text-[#dadce0] mx-auto" />
                   <p className="text-sm font-medium text-[#5f6368]">No incoming emails yet</p>
-                  <p className="text-xs text-[#80868b]">Click "Receive Incoming Mail" above to simulate receiving an email from a sender.</p>
+                  <p className="text-xs text-[#80868b]">No emails found. Send an email with attachments to your inbox or click the sync button above to check.</p>
                 </div>
               ) : (
                 <div className="divide-y divide-[#f1f3f4]">
@@ -563,7 +565,7 @@ export function App() {
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                handleDeleteSingleEmail(email.id, email.subject);
+                                handleDeleteSingleEmail(email.id);
                               }}
                               className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-50 text-gray-400 hover:text-red-500 rounded transition-all"
                               title="Delete this email"

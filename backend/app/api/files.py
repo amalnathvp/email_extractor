@@ -124,12 +124,11 @@ def preview_file(file_id: int, db: Session = Depends(get_db)):
 
 @router.delete("/{file_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_file(file_id: int, db: Session = Depends(get_db)):
-    """Deletes a file attachment directly from Supabase."""
-    att = db.query(Attachment).filter(Attachment.id == file_id).first()
-    if not att:
+    """Deletes a file attachment directly from Supabase without loading binary data."""
+    deleted_count = db.query(Attachment).filter(Attachment.id == file_id).delete(synchronize_session=False)
+    if not deleted_count:
         raise HTTPException(status_code=404, detail="File attachment not found")
 
-    db.delete(att)
     db.commit()
-    logger.info(f"Deleted file attachment from Supabase: ID {file_id} ({att.original_filename})")
+    logger.info(f"Deleted file attachment from Supabase: ID {file_id}")
     return None
