@@ -35,46 +35,38 @@ Below is the detailed architectural flow of **Email Extractor**, illustrating ho
 ```mermaid
 flowchart TD
     subgraph External["1. External Mail Services"]
-        Sender["External Senders"] -->|Send Email with Attachments| MailServer["Mail Provider Inbox<br/>(Zoho Mail / Gmail / Outlook)"]
-        MailServer -->|IMAP SSL (Port 993)| Receiver["IMAP Receiver & Sync Worker"]
+        Sender["External Senders"] -->|"Send Email with Attachments"| MailServer["Mail Provider Inbox<br/>(Zoho Mail / Gmail / Outlook)"]
+        MailServer -->|"IMAP SSL: 993"| Receiver["IMAP Receiver & Sync Worker"]
     end
 
     subgraph Backend["2. FastAPI Processing Pipeline (Port 8000)"]
-        Receiver --> Parser["MIME & Header Parser<br/>(RFC 822, Plain/HTML Body, Headers)"]
-        Parser --> Idempotency{"Idempotency Gate<br/>(Check Message-ID)"}
+        Receiver --> Parser["MIME & Header Parser<br/>(RFC 822 & Body Content)"]
+        Parser --> Idempotency{"Check Message-ID"}
         
-        Idempotency -->|Already Processed| Skip["Skip Duplicate & Mark Seen"]
-        Idempotency -->|New Email| Classifier["Magic-Byte & Extension Classifier<br/>(PDF, Images, Video, Audio, Others)"]
+        Idempotency -->|"Already Processed"| Skip["Skip Duplicate & Mark Seen"]
+        Idempotency -->|"New Email"| Classifier["Magic-Byte & Extension Classifier<br/>(PDF, Images, Video, Audio, Others)"]
         
         Classifier --> StorageEngine["Storage & Persistence Engine"]
         
-        subgraph API["FastAPI REST API Endpoints"]
-            EmailAPI["/api/emails<br/>(Listing, Search, Instant Delete)"]
-            FileAPI["/api/files<br/>(Category Filter, Preview, Download)"]
-            SyncAPI["/api/process<br/>(IMAP Trigger & Background Sync)"]
-        end
+        EmailAPI["/api/emails<br/>(Listing & Instant Delete)"]
+        FileAPI["/api/files<br/>(Preview & Download)"]
+        SyncAPI["/api/process<br/>(IMAP Sync Trigger)"]
     end
 
     subgraph Storage["3. Database & Storage Layer"]
-        StorageEngine -->|Save Metadata & Binary Blobs| Supabase[("Supabase PostgreSQL<br/>• emails table (Message-ID Index)<br/>• attachments table (Cascade Delete)")]
-        StorageEngine -->|Save Categorized Files| LocalDisk["Categorized Local Storage<br/>• storage/pdf/<br/>• storage/jpg/<br/>• storage/video/<br/>• storage/audio/<br/>• storage/others/"]
+        StorageEngine -->|"Save Metadata & Binary"| Supabase[("Supabase PostgreSQL<br/>emails & attachments tables")]
+        StorageEngine -->|"Save Categorized Files"| LocalDisk["Categorized Local Storage<br/>storage/pdf, jpg, video, audio, others"]
         
-        EmailAPI <-->|Fast Indexed Queries| Supabase
-        FileAPI <-->|Stream Binary / Metadata| Supabase
-        FileAPI <-->|Read Local Files| LocalDisk
+        EmailAPI <-->|"Query Data"| Supabase
+        FileAPI <-->|"Stream Data"| Supabase
+        FileAPI <-->|"Read Files"| LocalDisk
     end
 
-    subgraph Frontend["4. React Dashboard (Port 5173 / Vercel)"]
+    subgraph Frontend["4. React Dashboard (Port 5173)"]
         Dashboard["Gmail-Inspired Web UI"]
-        Dashboard <-->|REST API Requests| API
-        
-        subgraph UIFeatures["Core UI Capabilities"]
-            Folders["Folder Navigation<br/>(INBOX, PDF, JPG, Video, Audio, Other)"]
-            LiveSearch["Instant Live Search"]
-            PreviewModal["Universal File Preview Modal"]
-            OptimisticUI["Optimistic State Updates (0ms Deletion)"]
-        end
-        Dashboard --- UIFeatures
+        Dashboard <-->|"REST Requests"| EmailAPI
+        Dashboard <-->|"REST Requests"| FileAPI
+        Dashboard <-->|"Trigger Sync"| SyncAPI
     end
 ```
 
