@@ -16,6 +16,7 @@ import {
   ArrowLeft,
   Inbox,
   CheckCircle2,
+  Menu,
 } from 'lucide-react';
 import { Attachment, Email } from './types';
 import { api } from './api/client';
@@ -33,6 +34,7 @@ export function App() {
   const [files, setFiles] = useState<Attachment[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
 
   // Multi-select for emails
   const [selectedEmailIds, setSelectedEmailIds] = useState<number[]>([]);
@@ -244,22 +246,105 @@ export function App() {
     }
   };
 
+  const folderItems = [
+    { id: 'INBOX' as const, label: 'All Mails', fullLabel: 'All Received Mails', count: emails.length, icon: <Mail className="w-4 h-4 text-[#1a73e8]" /> },
+    { id: 'PDF' as const, label: 'PDF', fullLabel: 'PDF Folder', count: pdfCount, icon: <FileText className="w-4 h-4 text-[#d93025]" /> },
+    { id: 'JPG' as const, label: 'Images', fullLabel: 'JPG / Images', count: jpgCount, icon: <ImageIcon className="w-4 h-4 text-[#9334e6]" /> },
+    { id: 'VIDEO' as const, label: 'Video', fullLabel: 'Video Folder', count: videoCount, icon: <Video className="w-4 h-4 text-[#1a73e8]" /> },
+    { id: 'AUDIO' as const, label: 'Audio', fullLabel: 'Audio Folder', count: audioCount, icon: <Music className="w-4 h-4 text-[#1e8e3e]" /> },
+    { id: 'OTHER' as const, label: 'Other', fullLabel: 'Other Files', count: otherCount, icon: <FolderArchive className="w-4 h-4 text-[#5f6368]" /> },
+  ];
+
   return (
     <div className="h-screen w-screen flex flex-col bg-[#f6f8fc] text-[#202124] overflow-hidden font-sans">
       
+      {/* Mobile Navigation Drawer (Slide-over) */}
+      {isMobileMenuOpen && (
+        <div className="fixed inset-0 z-50 md:hidden flex">
+          <div
+            className="fixed inset-0 bg-black/40 backdrop-blur-xs transition-opacity animate-in fade-in duration-150"
+            onClick={() => setIsMobileMenuOpen(false)}
+          />
+          <div className="relative w-72 max-w-[85vw] bg-[#f6f8fc] h-full shadow-2xl flex flex-col p-4 z-10 animate-in slide-in-from-left duration-200">
+            <div className="flex items-center justify-between pb-3 border-b border-[#dadce0]">
+              <div className="flex items-center space-x-2.5">
+                <div className="p-2 bg-[#e8f0fe] rounded-xl text-[#1a73e8]">
+                  <Mail className="w-5 h-5 text-[#1a73e8]" />
+                </div>
+                <span className="font-bold text-[#1f2937] text-base">Mail Extractor</span>
+              </div>
+              <button
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="p-1.5 rounded-full hover:bg-[#dadce0] text-[#5f6368] transition-colors"
+                aria-label="Close menu"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Mailbox Status */}
+            <div className="py-2.5 px-3 my-3 bg-white rounded-xl border border-[#dadce0] text-xs space-y-1 shadow-xs">
+              <div className="flex items-center space-x-1.5 text-[11px] text-[#5f6368]">
+                <span className="w-2 h-2 rounded-full bg-[#1e8e3e] animate-pulse" />
+                <span>Active Inbox</span>
+              </div>
+              <div className="font-semibold text-[#1f1f1f] truncate text-xs">{MY_EMAIL}</div>
+            </div>
+
+            {/* Folders List in Drawer */}
+            <nav className="space-y-1 flex-1 overflow-y-auto mt-1">
+              {folderItems.map((item) => {
+                const isActive = currentFolder === item.id && !selectedEmail;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => {
+                      setCurrentFolder(item.id);
+                      setSelectedEmail(null);
+                      setIsMobileMenuOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-medium transition-colors ${
+                      isActive
+                        ? 'bg-[#dbeafe] text-[#1e40af] font-bold shadow-xs'
+                        : 'text-[#444746] hover:bg-[#e8eaed]'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-3 truncate">
+                      <span className="shrink-0">{item.icon}</span>
+                      <span className="truncate">{item.fullLabel}</span>
+                    </div>
+                    <span className={`text-[11px] font-mono px-2 py-0.5 rounded-full ${isActive ? 'bg-[#bfdbfe] text-[#1e40af]' : 'text-[#5f6368]'}`}>
+                      {item.count}
+                    </span>
+                  </button>
+                );
+              })}
+            </nav>
+          </div>
+        </div>
+      )}
+
       {/* 1. Header (Mail Extractor) */}
-      <header className="h-16 px-5 flex items-center justify-between border-b border-[#dadce0] bg-[#f6f8fc] select-none z-20 shrink-0">
-        {/* Logo & Brand: Mail Extractor */}
-        <div className="flex items-center space-x-3 w-72">
+      <header className="h-16 px-3 sm:px-5 flex items-center justify-between border-b border-[#dadce0] bg-[#f6f8fc] select-none z-20 shrink-0 gap-2">
+        {/* Left: Hamburger (mobile only) + Logo & Brand */}
+        <div className="flex items-center space-x-2 sm:space-x-3 shrink-0">
+          <button
+            onClick={() => setIsMobileMenuOpen(true)}
+            className="md:hidden p-2 -ml-1 text-[#5f6368] hover:text-[#202124] hover:bg-[#e8eaed] rounded-full transition-colors"
+            title="Open folders menu"
+            aria-label="Open menu"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
           <div className="p-2 bg-[#e8f0fe] rounded-xl text-[#1a73e8] shadow-sm">
             <Mail className="w-5 h-5 text-[#1a73e8]" />
           </div>
-          <span className="text-[20px] font-bold text-[#1f2937] tracking-tight">Mail Extractor</span>
+          <span className="text-base sm:text-lg md:text-[20px] font-bold text-[#1f2937] tracking-tight">Mail Extractor</span>
         </div>
 
-        {/* Search Bar */}
-        <div className="flex-1 max-w-2xl px-2">
-          <div className="relative flex items-center bg-[#eaf1fb] hover:bg-[#e1eaf7] hover:shadow-sm focus-within:bg-white focus-within:shadow-md transition-all rounded-full px-4 py-2 border border-transparent">
+        {/* Search Bar (Desktop & Tablet) */}
+        <div className="hidden md:flex flex-1 max-w-2xl px-2">
+          <div className="w-full relative flex items-center bg-[#eaf1fb] hover:bg-[#e1eaf7] hover:shadow-sm focus-within:bg-white focus-within:shadow-md transition-all rounded-full px-4 py-2 border border-transparent">
             <Search className="w-5 h-5 text-[#5f6368] shrink-0" />
             <input
               type="text"
@@ -276,12 +361,17 @@ export function App() {
           </div>
         </div>
 
-        {/* Navbar Right: Only Active Mailbox & Avatar */}
-        <div className="flex items-center space-x-3">
-          <div className="flex items-center space-x-2 bg-white border border-[#dadce0] px-3.5 py-1.5 rounded-full text-xs text-[#444746] shadow-sm">
+        {/* Navbar Right: Active Mailbox & Avatar */}
+        <div className="flex items-center space-x-2 sm:space-x-3 shrink-0">
+          <div className="hidden sm:flex items-center space-x-2 bg-white border border-[#dadce0] px-3.5 py-1.5 rounded-full text-xs text-[#444746] shadow-sm">
             <span className="w-2.5 h-2.5 rounded-full bg-[#1e8e3e] animate-pulse" />
             <span className="text-[#5f6368]">Inbox:</span>
-            <span className="font-semibold text-[#1f1f1f]">{MY_EMAIL}</span>
+            <span className="font-semibold text-[#1f1f1f] truncate max-w-[180px]">{MY_EMAIL}</span>
+          </div>
+
+          <div className="sm:hidden flex items-center space-x-1.5 bg-white border border-[#dadce0] px-2.5 py-1 rounded-full text-xs shadow-xs" title={`Inbox: ${MY_EMAIL}`}>
+            <span className="w-2 h-2 rounded-full bg-[#1e8e3e] animate-pulse" />
+            <span className="text-[11px] font-medium text-[#1f1f1f]">Live</span>
           </div>
 
           <div className="w-8 h-8 rounded-full bg-[#1a73e8] text-white flex items-center justify-center text-sm font-bold shadow-sm">
@@ -290,23 +380,60 @@ export function App() {
         </div>
       </header>
 
+      {/* Mobile Search Bar Row (md:hidden) */}
+      <div className="md:hidden px-3 pt-2 pb-1.5 bg-[#f6f8fc] border-b border-[#dadce0]/60 shrink-0">
+        <div className="relative flex items-center bg-[#eaf1fb] focus-within:bg-white focus-within:shadow-sm transition-all rounded-full px-3.5 py-1.5 border border-transparent">
+          <Search className="w-4 h-4 text-[#5f6368] shrink-0" />
+          <input
+            type="text"
+            placeholder="Search emails or attachments..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full bg-transparent px-2.5 text-xs text-[#202124] placeholder-[#5f6368] outline-none"
+          />
+          {search && (
+            <button onClick={() => setSearch('')} className="p-0.5 hover:bg-[#dadce0] rounded-full text-[#5f6368]">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Mobile Horizontal Quick Folder Carousel (md:hidden) */}
+      <div className="md:hidden flex items-center space-x-2 px-3 py-2 bg-[#f6f8fc] overflow-x-auto no-scrollbar border-b border-[#dadce0] shrink-0">
+        {folderItems.map((item) => {
+          const isActive = currentFolder === item.id && !selectedEmail;
+          return (
+            <button
+              key={item.id}
+              onClick={() => {
+                setCurrentFolder(item.id);
+                setSelectedEmail(null);
+              }}
+              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap shrink-0 transition-all ${
+                isActive
+                  ? 'bg-[#dbeafe] text-[#1e40af] font-bold shadow-xs'
+                  : 'bg-white border border-[#dadce0] text-[#444746] hover:bg-[#e8eaed]'
+              }`}
+            >
+              <span className="shrink-0">{item.icon}</span>
+              <span>{item.label}</span>
+              <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full ${isActive ? 'bg-[#bfdbfe] text-[#1e40af]' : 'bg-[#f1f3f4] text-[#5f6368]'}`}>
+                {item.count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
       {/* Main Workspace */}
       <div className="flex-1 flex overflow-hidden">
         
-        {/* 2. Left Folder Sidebar (Clean - bottom card removed) */}
-        <aside className="w-64 p-3 flex flex-col shrink-0 bg-[#f6f8fc] select-none">
+        {/* 2. Left Folder Sidebar (Desktop only) */}
+        <aside className="hidden md:flex w-64 p-3 flex-col shrink-0 bg-[#f6f8fc] select-none">
           <div className="space-y-4">
-            
-            {/* Folders List */}
             <nav className="space-y-1">
-              {[
-                { id: 'INBOX' as const, label: 'All Received Mails', count: emails.length, icon: <Mail className="w-4 h-4" /> },
-                { id: 'PDF' as const, label: 'PDF Folder', count: pdfCount, icon: <FileText className="w-4 h-4 text-[#d93025]" /> },
-                { id: 'JPG' as const, label: 'JPG / Images', count: jpgCount, icon: <ImageIcon className="w-4 h-4 text-[#9334e6]" /> },
-                { id: 'VIDEO' as const, label: 'Video Folder', count: videoCount, icon: <Video className="w-4 h-4 text-[#1a73e8]" /> },
-                { id: 'AUDIO' as const, label: 'Audio Folder', count: audioCount, icon: <Music className="w-4 h-4 text-[#1e8e3e]" /> },
-                { id: 'OTHER' as const, label: 'Other Files', count: otherCount, icon: <FolderArchive className="w-4 h-4 text-[#5f6368]" /> },
-              ].map((item) => {
+              {folderItems.map((item) => {
                 const isActive = currentFolder === item.id && !selectedEmail;
                 return (
                   <button
@@ -323,7 +450,7 @@ export function App() {
                   >
                     <div className="flex items-center space-x-3 truncate">
                       <span className="shrink-0">{item.icon}</span>
-                      <span className="truncate">{item.label}</span>
+                      <span className="truncate">{item.fullLabel}</span>
                     </div>
                     <span className={`text-[11px] font-mono px-2 py-0.5 rounded-full ${isActive ? 'bg-[#bfdbfe] text-[#1e40af]' : 'text-[#5f6368]'}`}>
                       {item.count}
@@ -336,11 +463,11 @@ export function App() {
         </aside>
 
         {/* 3. Main Workspace Container */}
-        <main className="flex-1 bg-white m-3 ml-0 rounded-2xl border border-[#dadce0] shadow-sm flex flex-col overflow-hidden">
+        <main className="flex-1 bg-white md:m-3 md:ml-0 md:rounded-2xl border-0 md:border md:border-[#dadce0] shadow-none md:shadow-sm flex flex-col overflow-hidden">
           
           {/* Action Toolbar */}
-          <div className="h-12 px-4 border-b border-[#f1f3f4] flex items-center justify-between bg-white shrink-0 select-none">
-            <div className="flex items-center space-x-2">
+          <div className="h-12 px-3 sm:px-4 border-b border-[#f1f3f4] flex items-center justify-between bg-white shrink-0 select-none">
+            <div className="flex items-center space-x-2 min-w-0">
               {selectedEmail ? (
                 <div className="flex items-center space-x-2">
                   <button
@@ -348,7 +475,7 @@ export function App() {
                     className="flex items-center space-x-1 p-1.5 hover:bg-[#f1f3f4] rounded-full text-[#5f6368] hover:text-[#202124] transition-colors"
                   >
                     <ArrowLeft className="w-4 h-4" />
-                    <span className="text-xs font-medium pl-1">Back to Inbox</span>
+                    <span className="text-xs font-medium pl-0.5 sm:pl-1">Back</span>
                   </button>
                   <span className="text-[#80868b]">|</span>
                   <button
@@ -361,7 +488,7 @@ export function App() {
                   </button>
                 </div>
               ) : (
-                <div className="flex items-center space-x-3 text-xs font-medium text-[#444746]">
+                <div className="flex items-center space-x-2 sm:space-x-3 text-xs font-medium text-[#444746]">
                   {currentFolder === 'INBOX' && (
                     <input
                       type="checkbox"
@@ -393,17 +520,17 @@ export function App() {
                       </span>
                       <button
                         onClick={handleDeleteSelectedEmails}
-                        className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 font-semibold text-xs border border-red-200 transition-colors shadow-xs"
+                        className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 font-semibold text-xs border border-red-200 transition-colors shadow-xs"
                         title="Delete selected emails"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
-                        <span>Delete ({selectedEmailIds.length})</span>
+                        <span>Delete</span>
                       </button>
                     </div>
                   ) : (
                     <>
-                      <span className="text-[#80868b]">|</span>
-                      <span className="font-semibold text-[#1f1f1f]">
+                      <span className="text-[#80868b] hidden sm:inline">|</span>
+                      <span className="font-semibold text-[#1f1f1f] text-xs sm:text-sm truncate">
                         {currentFolder === 'INBOX' ? `Incoming Mails (${emails.length})` : `${currentFolder} Folder`}
                       </span>
                     </>
@@ -431,25 +558,25 @@ export function App() {
           <div className="flex-1 overflow-y-auto">
             {selectedEmail ? (
               /* Email Reading Pane */
-              <div className="p-6 max-w-4xl space-y-6">
+              <div className="p-3.5 sm:p-6 max-w-4xl space-y-4 sm:space-y-6">
                 <div className="border-b border-[#dadce0] pb-4">
-                  <h1 className="text-xl font-medium text-[#202124] mb-3">{selectedEmail.subject || '(No Subject)'}</h1>
-                  <div className="flex items-center justify-between text-xs text-[#5f6368]">
-                    <div className="flex items-center space-x-2.5">
-                      <div className="w-8 h-8 rounded-full bg-[#1a73e8] text-white flex items-center justify-center font-semibold text-sm">
+                  <h1 className="text-lg sm:text-xl font-medium text-[#202124] mb-2.5 sm:mb-3 break-words">{selectedEmail.subject || '(No Subject)'}</h1>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between text-xs text-[#5f6368] gap-2">
+                    <div className="flex items-center space-x-2.5 min-w-0">
+                      <div className="w-8 h-8 rounded-full bg-[#1a73e8] text-white flex items-center justify-center font-semibold text-sm shrink-0">
                         {selectedEmail.sender[0]?.toUpperCase() || 'S'}
                       </div>
-                      <div>
-                        <span className="font-bold text-[#202124]">{selectedEmail.sender}</span>
-                        <div className="text-[11px] text-[#5f6368]">to: {selectedEmail.recipient || MY_EMAIL}</div>
+                      <div className="truncate">
+                        <span className="font-bold text-[#202124] truncate block">{selectedEmail.sender}</span>
+                        <div className="text-[11px] text-[#5f6368] truncate">to: {selectedEmail.recipient || MY_EMAIL}</div>
                       </div>
                     </div>
-                    <span className="font-mono">{selectedEmail.received_at ? new Date(selectedEmail.received_at).toLocaleString() : ''}</span>
+                    <span className="font-mono text-[11px] sm:text-xs shrink-0">{selectedEmail.received_at ? new Date(selectedEmail.received_at).toLocaleString() : ''}</span>
                   </div>
                 </div>
 
                 {/* Email Body */}
-                <div className="text-sm text-[#3c4043] leading-relaxed whitespace-pre-wrap py-2">
+                <div className="text-sm text-[#3c4043] leading-relaxed whitespace-pre-wrap py-2 break-words overflow-x-auto">
                   {selectedEmail.body || 'No text content.'}
                 </div>
 
@@ -459,7 +586,7 @@ export function App() {
                     <h3 className="text-xs font-semibold text-[#5f6368] uppercase tracking-wider">
                       {selectedEmail.attachments.length} Attachments Arranged into Folders:
                     </h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
                       {selectedEmail.attachments.map((att) => (
                         <div
                           key={att.id}
@@ -467,9 +594,9 @@ export function App() {
                         >
                           <div
                             onClick={() => setPreviewFile(att)}
-                            className="flex items-center space-x-3 truncate cursor-pointer flex-1"
+                            className="flex items-center space-x-3 truncate cursor-pointer flex-1 min-w-0"
                           >
-                            <span className="p-2 bg-white rounded-lg border border-[#dadce0] shadow-sm">
+                            <span className="p-2 bg-white rounded-lg border border-[#dadce0] shadow-sm shrink-0">
                               {att.file_category === 'PDF' && <FileText className="w-5 h-5 text-red-500" />}
                               {att.file_category === 'IMAGE' && <ImageIcon className="w-5 h-5 text-purple-500" />}
                               {att.file_category === 'VIDEO' && <Video className="w-5 h-5 text-blue-500" />}
@@ -484,7 +611,7 @@ export function App() {
                             </div>
                           </div>
 
-                          <div className="flex items-center space-x-1 pl-2">
+                          <div className="flex items-center space-x-1 pl-2 shrink-0">
                             <button
                               onClick={() => setPreviewFile(att)}
                               className="p-1.5 hover:bg-[#dadce0] rounded-full text-[#5f6368] hover:text-[#202124]"
@@ -515,7 +642,7 @@ export function App() {
                   <span>Loading emails from Supabase...</span>
                 </div>
               ) : emails.length === 0 ? (
-                <div className="p-16 text-center space-y-2">
+                <div className="p-12 sm:p-16 text-center space-y-2">
                   <Mail className="w-10 h-10 text-[#dadce0] mx-auto" />
                   <p className="text-sm font-medium text-[#5f6368]">No incoming emails yet</p>
                   <p className="text-xs text-[#80868b]">No emails found. Send an email with attachments to your inbox or click the sync button above to check.</p>
@@ -528,12 +655,56 @@ export function App() {
                       <div
                         key={email.id}
                         onClick={() => setSelectedEmail(email)}
-                        className={`px-4 py-3 cursor-pointer transition-colors text-xs group flex flex-col space-y-2 ${
+                        className={`px-3 sm:px-4 py-2.5 sm:py-3 cursor-pointer transition-colors text-xs group flex flex-col space-y-1.5 sm:space-y-2 ${
                           isSelected ? 'bg-[#e8f0fe]' : 'hover:bg-[#f8fafd]'
                         }`}
                       >
-                        {/* Main Email Header Row: Checkbox, Sender, Subject, Snippet, Date, Delete Action */}
-                        <div className="flex items-center justify-between">
+                        {/* Mobile Email Card View (md:hidden) */}
+                        <div className="md:hidden flex flex-col space-y-1.5">
+                          <div className="flex items-start justify-between">
+                            <div className="flex items-center space-x-2.5 min-w-0 flex-1 pr-2">
+                              <div onClick={(e) => e.stopPropagation()} className="shrink-0">
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={() => handleToggleEmailSelect(email.id)}
+                                  className="rounded text-[#1a73e8] focus:ring-0 cursor-pointer w-4 h-4 mt-0.5"
+                                />
+                              </div>
+                              <span className="font-bold text-[#202124] text-xs truncate">
+                                {email.sender.replace(/<.*>/, '').trim() || email.sender}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center space-x-1 shrink-0">
+                              <span className="text-[10px] font-mono text-[#5f6368]">
+                                {email.received_at ? new Date(email.received_at).toLocaleDateString([], { month: 'short', day: 'numeric' }) : ''}
+                              </span>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteSingleEmail(email.id);
+                                }}
+                                className="p-1.5 text-gray-400 hover:text-red-500 rounded-full hover:bg-red-50 transition-colors"
+                                title="Delete this email"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="pl-6.5">
+                            <div className="font-semibold text-[#1f1f1f] text-xs truncate">
+                              {email.subject || '(No Subject)'}
+                            </div>
+                            <div className="text-[#5f6368] text-[11px] line-clamp-2 mt-0.5 leading-snug">
+                              {email.body ? email.body.slice(0, 100) : 'No preview available'}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Desktop Email Header Row (hidden md:flex) */}
+                        <div className="hidden md:flex items-center justify-between">
                           <div className="flex items-center space-x-3 flex-1 min-w-0 pr-4">
                             <div onClick={(e) => e.stopPropagation()} className="shrink-0">
                               <input
@@ -575,50 +746,50 @@ export function App() {
                           </div>
                         </div>
 
-                      {/* Attachment Files: Prominently displayed beneath the email row */}
-                      {email.attachments && email.attachments.length > 0 && (
-                        <div className="flex items-center space-x-2 pl-7 flex-wrap gap-y-1.5" onClick={(e) => e.stopPropagation()}>
-                          <div className="flex items-center space-x-1 text-[#5f6368] font-medium text-[11px] mr-1 shrink-0">
-                            <Paperclip className="w-3.5 h-3.5 text-[#1a73e8]" />
-                            <span>{email.attachments.length} attachment{email.attachments.length > 1 ? 's' : ''}:</span>
+                        {/* Attachment Files: Prominently displayed beneath the email row */}
+                        {email.attachments && email.attachments.length > 0 && (
+                          <div className="flex items-center space-x-2 pl-0 sm:pl-7 flex-wrap gap-y-1.5" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center space-x-1 text-[#5f6368] font-medium text-[11px] mr-1 shrink-0">
+                              <Paperclip className="w-3.5 h-3.5 text-[#1a73e8]" />
+                              <span>{email.attachments.length} attachment{email.attachments.length > 1 ? 's' : ''}:</span>
+                            </div>
+                            {email.attachments.map((att) => (
+                              <a
+                                key={att.id}
+                                href={api.getFileDownloadUrl(att.id)}
+                                download={att.original_filename}
+                                className="inline-flex items-center space-x-1.5 px-2.5 sm:px-3 py-1 rounded-lg border border-[#dadce0] bg-white hover:bg-[#e8f0fe] hover:border-[#1a73e8] text-[#1a73e8] font-medium text-[11px] transition-all shadow-xs group/att"
+                                title={`Click to download ${att.original_filename} (storage/${att.file_category.toLowerCase()}/ • ${formatBytes(att.file_size)})`}
+                              >
+                                {att.file_category === 'PDF' && <FileText className="w-3.5 h-3.5 text-red-500 shrink-0" />}
+                                {att.file_category === 'IMAGE' && <ImageIcon className="w-3.5 h-3.5 text-purple-500 shrink-0" />}
+                                {att.file_category === 'VIDEO' && <Video className="w-3.5 h-3.5 text-blue-500 shrink-0" />}
+                                {att.file_category === 'AUDIO' && <Music className="w-3.5 h-3.5 text-emerald-500 shrink-0" />}
+                                {!['PDF', 'IMAGE', 'VIDEO', 'AUDIO'].includes(att.file_category) && <FolderArchive className="w-3.5 h-3.5 text-gray-500 shrink-0" />}
+                                <span className="font-semibold text-gray-800 group-hover/att:text-[#1a73e8] truncate max-w-[140px] sm:max-w-[200px]">{att.original_filename}</span>
+                                <span className="text-[10px] text-gray-500 font-mono">({formatBytes(att.file_size)})</span>
+                                <Download className="w-3 h-3 text-[#1a73e8] opacity-70 group-hover/att:opacity-100 shrink-0" />
+                              </a>
+                            ))}
                           </div>
-                          {email.attachments.map((att) => (
-                            <a
-                              key={att.id}
-                              href={api.getFileDownloadUrl(att.id)}
-                              download={att.original_filename}
-                              className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-lg border border-[#dadce0] bg-white hover:bg-[#e8f0fe] hover:border-[#1a73e8] text-[#1a73e8] font-medium text-[11px] transition-all shadow-xs group/att"
-                              title={`Click to download ${att.original_filename} (storage/${att.file_category.toLowerCase()}/ • ${formatBytes(att.file_size)})`}
-                            >
-                              {att.file_category === 'PDF' && <FileText className="w-3.5 h-3.5 text-red-500 shrink-0" />}
-                              {att.file_category === 'IMAGE' && <ImageIcon className="w-3.5 h-3.5 text-purple-500 shrink-0" />}
-                              {att.file_category === 'VIDEO' && <Video className="w-3.5 h-3.5 text-blue-500 shrink-0" />}
-                              {att.file_category === 'AUDIO' && <Music className="w-3.5 h-3.5 text-emerald-500 shrink-0" />}
-                              {!['PDF', 'IMAGE', 'VIDEO', 'AUDIO'].includes(att.file_category) && <FolderArchive className="w-3.5 h-3.5 text-gray-500 shrink-0" />}
-                              <span className="font-semibold text-gray-800 group-hover/att:text-[#1a73e8]">{att.original_filename}</span>
-                              <span className="text-[10px] text-gray-500 font-mono">({formatBytes(att.file_size)})</span>
-                              <Download className="w-3 h-3 text-[#1a73e8] opacity-70 group-hover/att:opacity-100 shrink-0" />
-                            </a>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )
             ) : (
               /* Specific Folder View (PDF, JPG, Video, Audio, Other) */
               loading ? (
                 <div className="p-12 text-center text-xs text-[#5f6368]">Loading files...</div>
               ) : filteredFiles.length === 0 ? (
-                <div className="p-16 text-center space-y-2">
+                <div className="p-12 sm:p-16 text-center space-y-2">
                   <FolderArchive className="w-10 h-10 text-[#dadce0] mx-auto" />
                   <p className="text-sm font-medium text-[#5f6368]">{currentFolder} folder is empty</p>
                   <p className="text-xs text-[#80868b]">Incoming {currentFolder} attachments will automatically be stored in storage/{currentFolder.toLowerCase()}/</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 p-5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4 p-3 sm:p-5">
                   {filteredFiles.map((file) => (
                     <FileGalleryCard
                       key={file.id}

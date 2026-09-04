@@ -38,3 +38,12 @@ body {
 button, a, input, select {
   transition: all 0.15s ease-in-out;
 }
+
+/* Hide scrollbar for mobile horizontal pill bar */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
