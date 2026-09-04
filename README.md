@@ -28,25 +28,91 @@
 
 ---
 
-## Simple and Explainable Architecture
+## System Architecture
 
-Below is the high-level architecture of Email Extractor:
+Below is the detailed architectural flow of **Email Extractor**, illustrating how external email providers, the FastAPI processing pipeline, the storage/database layers, and the React frontend communicate:
 
 ```mermaid
-flowchart LR
-    A[External Sender<br/>Sends Email with Files] --> B[Email Inbox<br/>Zoho / Gmail / Outlook]
-    B -->|IMAP SSL:993| C[Email Extractor Backend<br/>FastAPI Service]
-    C -->|Auto-Categorize| D[Categorized Storage<br/>pdf / jpg / video / audio / others]
-    C -->|Store Records & Blobs| E[(Supabase PostgreSQL)]
-    E --> F[React Dashboard<br/>Gmail-Inspired UI]
-    C -->|REST API| F
+flowchart TD
+    subgraph External["1. External Mail Services"]
+        Sender["External Senders"] -->|Send Email with Attachments| MailServer["Mail Provider Inbox<br/>(Zoho Mail / Gmail / Outlook)"]
+        MailServer -->|IMAP SSL (Port 993)| Receiver["IMAP Receiver & Sync Worker"]
+    end
+
+    subgraph Backend["2. FastAPI Processing Pipeline (Port 8000)"]
+        Receiver --> Parser["MIME & Header Parser<br/>(RFC 822, Plain/HTML Body, Headers)"]
+        Parser --> Idempotency{"Idempotency Gate<br/>(Check Message-ID)"}
+        
+        Idempotency -->|Already Processed| Skip["Skip Duplicate & Mark Seen"]
+        Idempotency -->|New Email| Classifier["Magic-Byte & Extension Classifier<br/>(PDF, Images, Video, Audio, Others)"]
+        
+        Classifier --> StorageEngine["Storage & Persistence Engine"]
+        
+        subgraph API["FastAPI REST API Endpoints"]
+            EmailAPI["/api/emails<br/>(Listing, Search, Instant Delete)"]
+            FileAPI["/api/files<br/>(Category Filter, Preview, Download)"]
+            SyncAPI["/api/process<br/>(IMAP Trigger & Background Sync)"]
+        end
+    end
+
+    subgraph Storage["3. Database & Storage Layer"]
+        StorageEngine -->|Save Metadata & Binary Blobs| Supabase[("Supabase PostgreSQL<br/>• emails table (Message-ID Index)<br/>• attachments table (Cascade Delete)")]
+        StorageEngine -->|Save Categorized Files| LocalDisk["Categorized Local Storage<br/>• storage/pdf/<br/>• storage/jpg/<br/>• storage/video/<br/>• storage/audio/<br/>• storage/others/"]
+        
+        EmailAPI <-->|Fast Indexed Queries| Supabase
+        FileAPI <-->|Stream Binary / Metadata| Supabase
+        FileAPI <-->|Read Local Files| LocalDisk
+    end
+
+    subgraph Frontend["4. React Dashboard (Port 5173 / Vercel)"]
+        Dashboard["Gmail-Inspired Web UI"]
+        Dashboard <-->|REST API Requests| API
+        
+        subgraph UIFeatures["Core UI Capabilities"]
+            Folders["Folder Navigation<br/>(INBOX, PDF, JPG, Video, Audio, Other)"]
+            LiveSearch["Instant Live Search"]
+            PreviewModal["Universal File Preview Modal"]
+            OptimisticUI["Optimistic State Updates (0ms Deletion)"]
+        end
+        Dashboard --- UIFeatures
+    end
 ```
 
-### How the Flow Works:
-1. **Email Arrival**: Senders send emails with attachments to your configured email address.
-2. **Ingestion & Parsing**: The backend polls the mail server via IMAP, retrieves raw email bytes, and parses headers, sender, subject, and MIME parts.
-3. **Auto-Sorting & Storage**: Attachments are automatically sorted by category into dedicated directories on disk and persisted in Supabase.
-4. **Instant Web Access**: The frontend communicates with the backend REST API to display organized folders, preview files, and provide instant management.
+---
+
+### Architectural Components in Detail
+
+#### 1. Ingestion & Polling Layer (`email_receiver.py`)
+- **Secure IMAP Connection**: Establishes an encrypted SSL connection to the target mail server on port `993` (supporting Zoho Mail, Gmail, Outlook, or custom IMAP).
+- **Inbox Search & Fetch**: Polls for unread messages (`UNSEEN`) or processes target folders, retrieving raw RFC 822 email byte streams.
+- **Message Lifecycle**: Marks processed messages as read (`\Seen`) to avoid redundant re-processing on subsequent sync passes.
+
+#### 2. Processing & Sorting Pipeline (`parser_service.py`, `classifier_service.py`, `processing_service.py`)
+- **MIME & Header Parsing**: Unpacks multipart boundaries, decodes subject headers, extracts sender/recipient addresses, timestamps, and both plain-text and HTML body contents.
+- **Strict Idempotency Check**: Extracts the unique RFC 822 `Message-ID`. Before downloading or storing attachments, it queries Supabase. If the `Message-ID` already exists, the email is safely skipped, guaranteeing zero duplicate entries.
+- **Multi-Layer Classification**: Evaluates each attachment using both **file extensions** and **magic bytes** (file signatures) to verify genuine file types before classifying:
+  - **`PDF`**: Validates `%PDF-` signature.
+  - **`JPG / Images`**: Validates JPEG, PNG, GIF, WebP headers.
+  - **`Video`**: Identifies MP4, MOV, AVI, MKV, WebM containers.
+  - **`Audio`**: Identifies MP3, WAV, AAC, OGG, M4A audio files.
+  - **`Others`**: Archives, spreadsheets, presentation slides, and miscellaneous formats.
+- **Collision-Resistant Storage**: Generates collision-proof filenames using the pattern `originalName_YYYYMMDD_HHMMSS_uuid8.ext` while preserving the clean original filename in database metadata.
+
+#### 3. Database & Storage Layer (Supabase PostgreSQL + Local Storage)
+- **Supabase PostgreSQL**:
+  - **`emails` table**: Stores `id`, `message_id` (indexed & unique), `sender`, `recipient`, `subject`, `body`, `received_at`, and `status`.
+  - **`attachments` table**: Stores `email_id` (foreign key with `ON DELETE CASCADE`), `original_filename`, `stored_filename`, `mime_type`, `file_category`, `file_size`, and raw binary `file_data` for serverless cloud persistence on Vercel.
+- **Categorized Disk Storage**: Saves files locally under `storage/{category}/` (`pdf/`, `jpg/`, `video/`, `audio/`, `others/`).
+
+#### 4. REST API Endpoints (`emails.py`, `files.py`, `process.py`)
+- **`/api/emails`**: Paginated email retrieval, full-text search across sender/subject/body, and high-speed direct SQL deletion.
+- **`/api/files`**: Category-filtered attachment retrieval, inline browser preview streaming (`/preview`), and direct file download (`/download`).
+- **`/api/process`**: Triggers immediate on-demand IMAP sync and fetches new incoming mail.
+
+#### 5. Frontend Client Layer (`React 18` + `Tailwind CSS`)
+- **Gmail-Inspired Aesthetic**: Modern, clean Google Workspace aesthetic with collapsible categories, attachment chips, and responsive layout.
+- **Optimistic UI (0ms Perceived Latency)**: State is updated immediately on delete actions without waiting for network round-trips; network requests run in the background with automatic rollback upon failure.
+- **Universal File Previewer**: Supports inline previews for images, PDF rendering, video player controls, and audio playback.
 
 ---
 
